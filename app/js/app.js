@@ -155,7 +155,27 @@ const rest = (() => {
       });
     } catch { /* ignore */ }
   }
+  // Sit just under the header. When the iOS keyboard pans the visual viewport
+  // past the header, follow the top of the visible area instead.
+  function position() {
+    const root = document.documentElement.style;
+    const hdr = document.querySelector('.top');
+    const hdrH = hdr ? hdr.offsetHeight : 0;
+    const off = window.visualViewport ? Math.max(0, visualViewport.offsetTop - hdrH) : 0;
+    root.setProperty('--hdr-h', `${hdrH}px`);
+    root.setProperty('--rest-h', bar.classList.contains('show') ? `${bar.offsetHeight}px` : '0px');
+    bar.style.transform = off ? `translateY(${off}px)` : '';
+    bar.classList.toggle('floating', off > 0);
+  }
+  window.visualViewport?.addEventListener('resize', position);
+  window.visualViewport?.addEventListener('scroll', position);
+  addEventListener('resize', position);
+
   function render() {
+    paint();
+    position();
+  }
+  function paint() {
     const t = get();
     if (!t) { bar.classList.remove('show', 'over', 'flash'); return; }
     const left = Math.round((t.endAt - Date.now()) / 1000);
@@ -210,7 +230,7 @@ const rest = (() => {
     render();
   }
   function sync() { if (get()) loop(); else render(); }
-  return { start, skip, sync, unlockAudio };
+  return { start, skip, sync, unlockAudio, position };
 })();
 
 // ---------------------------------------------------------------- scroll memory
@@ -245,6 +265,7 @@ function route() {
     default: view = viewHome(); currentRoute = '';
   }
   app.replaceChildren(view);
+  rest.position();
   const y = currentRoute.startsWith('session') ? ls.get(`scroll:${currentRoute}`, 0) : 0;
   requestAnimationFrame(() => scrollTo(0, y));
 }

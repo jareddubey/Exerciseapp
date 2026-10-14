@@ -16,6 +16,7 @@
   --up: #9fdcb0;
   --up-bg: #1f3a29;
   --flash: #3b7379;
+  --rest-bg: rgba(25, 30, 32, .72);
   --radius: 14px;
   --gutter: 12px;
   --tap: 48px;
@@ -44,6 +45,7 @@
     --up: #1d5c32;
     --up-bg: #d6f0de;
     --flash: #9fd0d4;
+    --rest-bg: rgba(255, 255, 255, .72);
     color-scheme: light;
   }
 }
@@ -65,7 +67,7 @@ a { color: var(--accent-text); }
 #app {
   max-width: 640px;
   margin: 0 auto;
-  padding: calc(var(--safe-t) + 0px) calc(var(--gutter) + var(--safe-r)) calc(140px + var(--safe-b)) calc(var(--gutter) + var(--safe-l));
+  padding: calc(var(--safe-t) + 0px) calc(var(--gutter) + var(--safe-r)) calc(48px + var(--safe-b)) calc(var(--gutter) + var(--safe-l));
 }
 
 /* ---------- header ---------- */
@@ -205,20 +207,27 @@ h3 { font-size: 15px; margin: 20px 0 8px; color: var(--muted); text-transform: u
 .session-foot { margin-top: 20px; display: grid; gap: 10px; }
 
 /* ---------- rest timer ---------- */
+/* Pinned under the header (top set from JS), translucent so content shows through. */
 #rest {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  padding: 10px calc(var(--gutter) + var(--safe-r)) calc(10px + var(--safe-b)) calc(var(--gutter) + var(--safe-l));
-  background: var(--surface); border-top: 1px solid var(--border);
+  position: fixed; left: 0; right: 0; top: var(--hdr-h, 0px); z-index: 20;
+  padding: 6px calc(var(--gutter) + var(--safe-r)) 6px calc(var(--gutter) + var(--safe-l));
+  background: var(--rest-bg); border-bottom: 1px solid var(--border);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4); backdrop-filter: blur(10px) saturate(1.4);
   display: flex; align-items: center; gap: 8px;
-  transform: translateY(110%); transition: transform .18s ease-out;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .15s ease-out, visibility 0s linear .15s;
 }
-#rest.show { transform: none; }
-#rest .rt-main { flex: 1; min-width: 0; }
-#rest .rt-time { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.05; }
-#rest .rt-label { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#rest .btn { padding: 0 10px; min-width: var(--tap); }
+#rest.show { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .15s ease-out; }
+#rest.floating { padding-top: calc(6px + var(--safe-t)); }
+#rest .rt-main { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+#rest .rt-time { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+#rest .rt-label { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#rest .btn { padding: 0 10px; min-width: var(--tap); background: transparent; }
+#rest .btn.primary { background: var(--accent); }
 #rest.flash { animation: flash .5s steps(1) 6; }
 #rest.over .rt-time { color: var(--accent-text); }
+/* Keep focused inputs clear of the header + timer when the keyboard scrolls them into view. */
+.num, .note, .field { scroll-margin-top: calc(var(--hdr-h, 64px) + var(--rest-h, 0px) + 8px); }
 @keyframes flash { 50% { background: var(--flash); } }
 
 /* ---------- forms ---------- */
