@@ -4,6 +4,7 @@ import {
   nextDay, otherDay, suggestWeight, lastPerformance, lastNote, deloadStatus, sessionsThisWeek,
   lastWorkout, backupStatus, newSession, formatSets, formatTarget, fmtNum, isFinished,
   performedSets, exerciseCatalog, exerciseHistory, convertProgramUnits, makeExerciseId, clean, DAY,
+  swapEntry,
 } from './logic.js';
 import { buildExport, parseImport, planImport, programsEqual, toCSV } from './backup.js';
 import { lineChart } from './chart.js';
@@ -543,7 +544,11 @@ function exerciseCard(session, ei, live, save) {
         e.sets.pop();
         renderSets(); save();
       },
-    }, '− Set')));
+    }, '− Set'),
+    live ? h('button', {
+      class: 'btn small', style: 'margin-left:auto', 'aria-label': `Swap ${e.name} for another exercise`,
+      onclick: () => card.replaceChildren(...swapPanel(session, ei)),
+    }, '⇄ Swap') : null));
 
   card.append(h('textarea', {
     class: 'note', rows: '1', placeholder: 'Note (seat position, how it felt…)', value: e.note || '',
@@ -551,6 +556,89 @@ function exerciseCard(session, ei, live, save) {
     oninput: (ev) => { e.note = ev.target.value; save(); },
   }));
   return card;
+}
+
+// Definition for an exercise id: program first, else its most recent session snapshot.
+function exerciseDef(id) {
+  const inProgram = state.program.A.concat(state.program.B).find((x) => x.id === id);
+  if (inProgram) return { ...inProgram };
+  const snap = state.sessions.filter((s) => s.entries.some((e) => e.exerciseId === id))
+    .sort((a, b) => b.startedAt - a.startedAt)[0]?.entries.find((e) => e.exerciseId === id);
+  return snap?.target ? { ...snap.target } : { id, name: snap?.name || id, sets: 2, repMin: 10, repMax: 12, restSec: 60, increment: 5 };
+}
+
+// Inline form that replaces an exercise card to swap it mid-workout.
+function swapPanel(session, ei) {
+  const e = session.entries[ei];
+  const base = e.target || {};
+  const inSession = new Set(session.entries.map((x) => x.exerciseId));
+  const cat = exerciseCatalog(state.program, state.sessions);
+  const known = [...cat.entries()].filter(([id]) => !inSession.has(id)).sort((a, b) => a[1].localeCompare(b[1]));
+
+  const pick = h('select', { class: 'field', 'aria-label': 'Replacement exercise' },
+    h('option', { value: '' }, 'New exercise…'),
+    known.map(([id, name]) => h('option', { value: id }, name)));
+  const name = h('input', { class: 'field', autocomplete: 'off', placeholder: 'e.g. Hip abduction machine' });
+  const num = (v, mode = 'numeric') => h('input', { class: 'field', type: 'text', inputmode: mode, value: String(v) });
+  const f = {
+    sets: num(base.sets ?? 2), restSec: num(base.restSec ?? 60),
+    repMin: num(base.repMin ?? 10), repMax: num(base.repMax ?? 12),
+    increment: num(base.increment || (units() === 'kg' ? 2.5 : 5), 'decimal'),
+  };
+  const perSide = h('input', { type: 'checkbox' });
+  const bodyweight = h('input', { type: 'checkbox' });
+  const fields = h('div', { class: 'form' },
+    h('label', null, 'Name', name),
+    h('div', { class: 'grid2' }, h('label', null, 'Sets', f.sets), h('label', null, 'Rest (sec)', f.restSec)),
+    h('div', { class: 'grid2' }, h('label', null, 'Reps min', f.repMin), h('label', null, 'Reps max', f.repMax)),
+    h('label', null, `Increment (${units()})`, f.increment),
+    h('label', { class: 'check' }, perSide, 'Reps per side'),
+    h('label', { class: 'check' }, bodyweight, 'Bodyweight (reps only)'));
+  pick.addEventListener('change', () => { fields.hidden = !!pick.value; });
+
+  const inProgram = state.program[session.day].some((x) => x.id === e.exerciseId);
+  const permanent = h('input', { type: 'checkbox' });
+
+  async function doSwap() {
+    let ex;
+    if (pick.value) {
+      ex = exerciseDef(pick.value);
+    } else {
+      const nm = name.value.trim();
+      if (!nm) { alert('Pick an exercise or enter a name.'); return; }
+      const n = (inp, d) => { const v = parseNum(inp.value); return v == null ? d : v; };
+      ex = {
+        id: makeExerciseId(nm, new Set([...cat.keys(), ...inSession])), name: nm, cue: '',
+        sets: Math.max(1, Math.round(n(f.sets, 2))), restSec: Math.max(0, Math.round(n(f.restSec, 60))),
+        repMin: Math.max(1, Math.round(n(f.repMin, 10))), repMax: Math.max(1, Math.round(n(f.repMax, 12))),
+        increment: bodyweight.checked ? 0 : Math.max(0, n(f.increment, 5)),
+        perSide: perSide.checked, bodyweight: bodyweight.checked,
+      };
+      if (ex.repMax < ex.repMin) [ex.repMin, ex.repMax] = [ex.repMax, ex.repMin];
+    }
+    const r = swapEntry(session, ei, ex, state.sessions);
+    session.entries = r.entries;
+    autosave(session);
+    await flushSave(session.id);
+    if (permanent.checked) {
+      const list = state.program[session.day].map((x) => (x.id === e.exerciseId ? { ...ex } : x));
+      await saveProgram({ ...state.program, [session.day]: list });
+    }
+    toast(r.kept ? `${e.name} kept (has sets) · ${ex.name} added` : `Swapped to ${ex.name}`);
+    route();
+  }
+
+  return [
+    h('h2', null, `Swap ${e.name}`),
+    h('p', { class: 'muted small' }, 'Just for this workout unless you tick the box below. History for each exercise stays separate.'),
+    h('div', { class: 'form', style: 'margin-top:10px' },
+      h('label', null, 'Replace with', pick),
+      fields,
+      inProgram ? h('label', { class: 'check' }, permanent, `Also replace it in the Session ${session.day} program`) : null,
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', onclick: doSwap }, 'Swap'),
+        h('button', { class: 'btn', onclick: () => route() }, 'Cancel'))),
+  ];
 }
 
 async function finishSession(session) {

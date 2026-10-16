@@ -250,3 +250,39 @@ test('exerciseHistory is chronological with top weight', () => {
   assert.deepEqual(h.map((x) => x.top), [30, 35]);
   assert.deepEqual(h.map((x) => x.day), ['A', 'B']);
 });
+
+// ---------- mid-session swap ----------
+import { swapEntry, makeEntry } from '../app/js/logic.js';
+
+test('swapEntry: untouched exercise is replaced in place', () => {
+  const s = newSession('B', SEED_PROGRAM, [], { now: T0 });
+  const i = s.entries.findIndex((e) => e.exerciseId === 'hip_thrust');
+  const abd = { id: 'hip_abduction', name: 'Hip abduction machine', sets: 2, repMin: 12, repMax: 15, restSec: 60, increment: 5 };
+  const r = swapEntry(s, i, abd, []);
+  assert.equal(r.entries.length, s.entries.length);
+  assert.equal(r.entries[i].exerciseId, 'hip_abduction');
+  assert.equal(r.index, i);
+  assert.equal(r.kept, false);
+  assert.ok(!r.entries.some((e) => e.exerciseId === 'hip_thrust'));
+});
+
+test('swapEntry: exercise with logged sets is kept, new one inserted after', () => {
+  const s = newSession('B', SEED_PROGRAM, [], { now: T0 });
+  const i = s.entries.findIndex((e) => e.exerciseId === 'hip_thrust');
+  s.entries[i].sets[0].reps = 8;
+  const abd = { id: 'hip_abduction', name: 'Hip abduction machine', sets: 2, repMin: 12, repMax: 15, restSec: 60, increment: 5 };
+  const r = swapEntry(s, i, abd, []);
+  assert.equal(r.entries.length, s.entries.length + 1);
+  assert.equal(r.entries[i].exerciseId, 'hip_thrust');
+  assert.equal(r.entries[i + 1].exerciseId, 'hip_abduction');
+  assert.equal(r.kept, true);
+});
+
+test('swapEntry: swapped-in exercise is prefilled from its own history, deload respected', () => {
+  const hist = [sess('A', T0, { leg_press: [[100, 12], [100, 12], [100, 12]] })];
+  const s = newSession('B', SEED_PROGRAM, hist, { now: T0 + 2 * DAY, deload: true });
+  const legPress = SEED_PROGRAM.A[0];
+  const r = swapEntry(s, 0, legPress, hist);
+  assert.deepEqual(r.entries[0].sets.map((x) => x.weight), [110, 110]);
+  assert.equal(makeEntry(legPress, hist).sets.length, 3);
+});

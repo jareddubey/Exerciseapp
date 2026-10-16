@@ -71,6 +71,7 @@ iOS can delete website data for sites that go unused. Installing to the Home Scr
 - **Weight stepper**: the card's −/+ changes all *unticked* sets. Typing a weight in one set carries it to later unticked sets that had the same value.
 - **Shared exercises**: exercises with the same `id` share history and progression. For example, `biceps_curl` appears in both A and B. In the program editor, add an exercise from the *Exercise* dropdown to reuse it on the other day.
 - **Swap vs. rename**: *Edit* keeps the id, so history continues. *Swap* creates a new exercise, and the old history stays under the old id.
+- **Swap mid-workout**: each exercise card has **⇄ Swap**. Pick a known exercise or enter a new one. It applies to this workout only, unless you tick *Also replace it in the program*. An untouched exercise is replaced in place. One that already has logged sets is kept, and the new one is added after it.
 - **Deload**: after 6 weeks (counted from the last deload, or from your first session), a banner offers *Start deload week* (7 days, one set less per exercise) or *Deload done* (resets the counter).
 - **Autosave**: every input is saved as you type. An unfinished session reopens where you left it, including the rest timer and scroll position.
 - **Rest timer**: ticking a set starts it. It vibrates where supported (not on iOS), beeps (optional; iOS mutes it with the silent switch), and flashes the bar. While a session is open, Screen Wake Lock keeps the display on where supported.

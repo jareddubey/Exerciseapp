@@ -142,6 +142,20 @@ export function targetSets(exercise, deload) {
   return deload ? Math.max(1, exercise.sets - 1) : exercise.sets;
 }
 
+/** A session entry for one exercise, weights prefilled from history. */
+export function makeEntry(ex, sessions, opts = {}) {
+  const units = opts.units || 'lb';
+  const n = targetSets(ex, !!opts.deload);
+  const weights = prefillWeights(ex, sessions, n, { units });
+  return {
+    exerciseId: ex.id,
+    name: ex.name,
+    target: { ...ex },
+    sets: weights.map((w) => ({ weight: ex.bodyweight ? null : w, reps: null, done: false })),
+    note: '',
+  };
+}
+
 /** Build a new in-progress session from the program, prefilled from history. */
 export function newSession(day, program, sessions, opts = {}) {
   const now = opts.now ?? Date.now();
@@ -154,18 +168,27 @@ export function newSession(day, program, sessions, opts = {}) {
     finishedAt: null,
     deload,
     unit: units,
-    entries: (program[day] || []).map((ex) => {
-      const n = targetSets(ex, deload);
-      const weights = prefillWeights(ex, sessions, n, { units });
-      return {
-        exerciseId: ex.id,
-        name: ex.name,
-        target: { ...ex },
-        sets: weights.map((w) => ({ weight: ex.bodyweight ? null : w, reps: null, done: false })),
-        note: '',
-      };
-    }),
+    entries: (program[day] || []).map((ex) => makeEntry(ex, sessions, { units, deload })),
   };
+}
+
+const entryHasData = (e) => e.sets.some((s) => Number(s.reps) > 0 || s.done) || !!(e.note && e.note.trim());
+
+/**
+ * Swap the exercise at `index` mid-session. An untouched entry is replaced;
+ * one with logged sets or a note is kept (so its history survives) and the
+ * new exercise is inserted right after it. Returns { entries, index } where
+ * index is the position of the new entry.
+ */
+export function swapEntry(session, index, ex, sessions) {
+  const entry = makeEntry(ex, sessions, { units: session.unit, deload: session.deload });
+  const entries = [...session.entries];
+  if (entryHasData(entries[index])) {
+    entries.splice(index + 1, 0, entry);
+    return { entries, index: index + 1, kept: true };
+  }
+  entries[index] = entry;
+  return { entries, index, kept: false };
 }
 
 /**
