@@ -8,7 +8,8 @@ import {
 import { SEED_PROGRAM } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday 5 Jan 2026, 18:00
-const curl = SEED_PROGRAM.A.find((e) => e.id === 'biceps_curl'); // 2 × 12–15, +5
+// Fixed at 2 sets so these tests don't depend on later program changes.
+const curl = { ...SEED_PROGRAM.A.find((e) => e.id === 'biceps_curl'), sets: 2 }; // 2 × 12–15, +5
 const press = SEED_PROGRAM.A.find((e) => e.id === 'chest_press'); // 3 × 10–12, +5
 const deadBug = SEED_PROGRAM.A.find((e) => e.id === 'dead_bug');
 
@@ -98,7 +99,7 @@ test('suggestWeight: uses most recent session only', () => {
 
 test('suggestWeight: biceps curl history is shared across A and B', () => {
   const s = [sess('A', T0, { biceps_curl: [[30, 15], [30, 15]] })];
-  const bCurl = SEED_PROGRAM.B.find((e) => e.id === 'biceps_curl');
+  const bCurl = { ...SEED_PROGRAM.B.find((e) => e.id === 'biceps_curl'), sets: 2 };
   assert.equal(suggestWeight(bCurl, s).weight, 35);
   s.push(sess('B', T0 + 2 * DAY, { biceps_curl: [[35, 13], [35, 12]] }));
   assert.equal(suggestWeight(curl, s).weight, 35);
@@ -200,10 +201,10 @@ test('deload: drops one set per exercise (min 1)', () => {
 
 // ---------- misc ----------
 test('newSession: prefills weights, leaves reps blank, snapshots targets', () => {
-  const s = [sess('A', T0, { biceps_curl: [[30, 15], [30, 15]] })];
+  const s = [sess('A', T0, { biceps_curl: [[30, 15], [30, 15], [30, 15]] })];
   const ns = newSession('B', SEED_PROGRAM, s, { now: T0 + 2 * DAY });
   const e = ns.entries.find((x) => x.exerciseId === 'biceps_curl');
-  assert.deepEqual(e.sets.map((x) => x.weight), [35, 35]);
+  assert.deepEqual(e.sets.map((x) => x.weight), [35, 35, 35]);
   assert.ok(e.sets.every((x) => x.reps === null && !x.done));
   assert.equal(e.target.repMax, 15);
   assert.equal(ns.finishedAt, null);

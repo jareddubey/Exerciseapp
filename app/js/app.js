@@ -8,6 +8,7 @@ import {
 } from './logic.js';
 import { buildExport, parseImport, planImport, programsEqual, toCSV } from './backup.js';
 import { lineChart } from './chart.js';
+import { PROGRAM_UPDATES } from './updates.js';
 
 const state = { program: null, settings: null, sessions: [] };
 const app = document.getElementById('app');
@@ -291,6 +292,16 @@ function viewHome() {
   const bk = backupStatus(state.settings, state.sessions, now);
   const last = lastWorkout(state.sessions);
   const root = h('div', null, topBar('Gym Tracker', { back: null }));
+
+  const notice = state.settings.programNotice;
+  if (notice) {
+    root.append(h('div', { class: 'banner' },
+      h('p', null, h('b', null, `Program updated: ${notice.title}`)),
+      h('ul', { style: 'margin:0 0 10px;padding-left:20px' }, notice.changes.map((c) => h('li', null, c))),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn small', onclick: async () => { await saveSettings({ programNotice: null }); route(); } }, 'OK'),
+        h('button', { class: 'btn small', onclick: () => { if (confirm('Undo these program changes?')) undoProgramUpdate(notice); } }, 'Undo'))));
+  }
 
   if (updateReady) {
     root.append(h('div', { class: 'banner' },
@@ -1033,8 +1044,41 @@ async function load() {
   state.settings = { ...DEFAULT_SETTINGS, ...(settings || {}) };
   state.program = program || { ...structuredClone(SEED_PROGRAM), unit: 'lb', updatedAt: Date.now() };
   state.sessions = sessions || [];
-  if (!program) await db.setKV('program', state.program);
+  if (!program) {
+    // A fresh program already includes every update.
+    state.settings.appliedUpdates = PROGRAM_UPDATES.map((u) => u.id);
+    await db.setKV('program', state.program);
+    await db.setKV('settings', state.settings);
+  } else {
+    await applyProgramUpdates();
+  }
   if (!settings) await db.setKV('settings', state.settings);
+}
+
+// One-time updates to a program already on the device. The previous program is
+// kept so the home-screen notice can offer Undo.
+async function applyProgramUpdates() {
+  const applied = new Set(state.settings.appliedUpdates || []);
+  for (const u of PROGRAM_UPDATES) {
+    if (applied.has(u.id)) continue;
+    applied.add(u.id);
+    const { program, changes } = u.apply(state.program);
+    if (changes.length) {
+      await db.setKV(`programBackup:${u.id}`, state.program);
+      await saveProgram(program);
+      state.settings.programNotice = { id: u.id, title: u.title, changes };
+    }
+    await saveSettings({ appliedUpdates: [...applied] });
+  }
+}
+
+async function undoProgramUpdate(notice) {
+  const prev = await db.getKV(`programBackup:${notice.id}`);
+  if (!prev) return;
+  await saveProgram(prev);
+  await saveSettings({ programNotice: null });
+  toast('Program change undone');
+  route();
 }
 
 function registerSW() {
