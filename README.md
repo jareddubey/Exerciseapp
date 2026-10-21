@@ -15,7 +15,8 @@ app/                    ← the deployable static site
   manifest.webmanifest
   sw.js                 service worker (cache-first app shell)
   css/app.css
-  js/seed.js            default program + settings
+  js/seed.js            default program (gym + home) + settings
+  js/updates.js         one-time program updates for existing installs
   js/logic.js           pure logic: nextDay, suggestWeight, lastPerformance, deloadStatus, …
   js/backup.js          pure export/import planning + CSV
   js/db.js              IndexedDB wrapper
@@ -65,6 +66,9 @@ iOS can delete website data for sites that go unused. Installing to the Home Scr
 
 ## How it works
 
+- **Gym or Home**: a toggle on the start screen picks where you're training. Home A/B work the same muscle groups as gym A/B with dumbbells, a pull-up bar, bands and an incline bench. Home sessions count in the same A/B rotation. Home exercises have their own ids, so their history and progression are separate from the gym; exercises that are truly the same (dead bug) share an id. Edit the home days under **Program → Home**.
+- **Load types**: each exercise is *Weight*, *Dumbbells* (logged per hand, shown as "lb ea"), *Bodyweight* (reps only) or *Band* (reps only; note the band in the exercise note). A band exercise shows **↑ Stronger band** once every set reaches the top of the rep range.
+- **Program updates**: changes to the default program ship as one-time updates (`app/js/updates.js`) that run on launch, work by exercise id so your own edits are kept, and show a home-screen notice with **Undo**.
 - **Next session**: the opposite of the last finished one, which gives A/B/A then B/A/B. The home screen also lets you start the other day.
 - **Prefill**: each set's weight comes from last time. Reps stay blank; the greyed placeholder shows last time's reps. The first tap on − or + fills that number in.
 - **Double progression**: if every set last time reached `repMax` (with at least the programmed number of sets), weights prefill at `+increment` and an **↑ Add 5 lb** badge appears. Deload sessions don't count as the basis. It's only a prefill, so you can always change it.
@@ -81,4 +85,4 @@ iOS can delete website data for sites that go unused. Installing to the Home Scr
 
 The JSON export holds `{ format: "ab-gym-tracker", version: 1, exportedAt, program, settings, sessions }`. Import merges by session id: new sessions are added; sessions that already exist with different content are only replaced if you confirm; a different program is only applied if you confirm.
 
-The CSV export has columns `date, session, exercise, set, weight, reps, note, unit, deload`.
+The CSV export has columns `date, session, exercise, set, weight, reps, note, unit, deload, location`.

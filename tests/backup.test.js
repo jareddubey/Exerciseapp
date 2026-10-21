@@ -43,7 +43,7 @@ test('planImport ignores key order', () => {
 test('CSV: one row per performed set, escaped note', () => {
   const csv = toCSV([session('a'), { ...session('z'), finishedAt: null }]);
   const lines = csv.trim().split('\r\n');
-  assert.equal(lines[0], 'date,session,exercise,set,weight,reps,note,unit,deload');
+  assert.equal(lines[0], 'date,session,exercise,set,weight,reps,note,unit,deload,location');
   assert.equal(lines.length, 3);
-  assert.equal(lines[1], '2026-01-05,A,Leg press,1,100,12,"seat 4, ""high""",lb,0');
+  assert.equal(lines[1], '2026-01-05,A,Leg press,1,100,12,"seat 4, ""high""",lb,0,gym');
 });

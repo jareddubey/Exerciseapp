@@ -1,5 +1,5 @@
 // Pure backup helpers: JSON export/import planning and CSV.
-import { isFinished, performedSets } from './logic.js';
+import { isFinished, performedSets, locationOf } from './logic.js';
 
 export const EXPORT_FORMAT = 'ab-gym-tracker';
 export const EXPORT_VERSION = 1;
@@ -23,8 +23,10 @@ function validSession(s) {
 }
 
 function validProgram(p) {
-  return p && Array.isArray(p.A) && Array.isArray(p.B) &&
-    [...p.A, ...p.B].every((ex) => ex && typeof ex.id === 'string' && typeof ex.name === 'string');
+  const lists = [p?.A, p?.B];
+  if (p?.home != null) lists.push(p.home.A, p.home.B);
+  return !!p && lists.every(Array.isArray) &&
+    lists.flat().every((ex) => ex && typeof ex.id === 'string' && typeof ex.name === 'string');
 }
 
 /** Parse and validate an export file. Throws with a readable message. */
@@ -67,7 +69,7 @@ export function planImport(current, incoming) {
 }
 
 export function programsEqual(a, b) {
-  const strip = (p) => p && { A: p.A, B: p.B };
+  const strip = (p) => p && { A: p.A, B: p.B, home: p.home ?? null };
   return stable(strip(a)) === stable(strip(b));
 }
 
@@ -84,18 +86,18 @@ function isoDate(ms) {
 
 /** One row per performed set of each finished session, oldest first. */
 export function toCSV(sessions) {
-  const rows = [['date', 'session', 'exercise', 'set', 'weight', 'reps', 'note', 'unit', 'deload']];
+  const rows = [['date', 'session', 'exercise', 'set', 'weight', 'reps', 'note', 'unit', 'deload', 'location']];
   const list = sessions.filter(isFinished).sort((a, b) => a.startedAt - b.startedAt);
   for (const s of list) {
     for (const e of s.entries) {
       const sets = performedSets(e);
       if (!sets.length && e.note) {
-        rows.push([isoDate(s.startedAt), s.day, e.name, '', '', '', e.note, s.unit, s.deload ? 1 : 0]);
+        rows.push([isoDate(s.startedAt), s.day, e.name, '', '', '', e.note, s.unit, s.deload ? 1 : 0, locationOf(s)]);
       }
       sets.forEach((set, i) => {
         rows.push([
           isoDate(s.startedAt), s.day, e.name, i + 1,
-          set.weight ?? '', set.reps, e.note || '', s.unit, s.deload ? 1 : 0,
+          set.weight ?? '', set.reps, e.note || '', s.unit, s.deload ? 1 : 0, locationOf(s),
         ]);
       });
     }

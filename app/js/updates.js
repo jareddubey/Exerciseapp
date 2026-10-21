@@ -2,6 +2,7 @@
 // device. Each works by exercise id so the user's own edits are preserved,
 // and is idempotent: running it on an already-updated program changes nothing.
 import { convertIncrement } from './logic.js';
+import { HOME_PROGRAM } from './seed.js';
 
 const LATERAL_RAISE = {
   id: 'lateral_raise', name: 'Cable lateral raise', sets: 3, repMin: 12, repMax: 20, restSec: 60, increment: 2.5,
@@ -71,4 +72,21 @@ export function armsShouldersUpdate(program) {
   return { program: { ...program, A, B }, changes };
 }
 
-export const PROGRAM_UPDATES = [{ id: 'arms-shoulders-2026-10', title: 'Arms & shoulders focus', apply: armsShouldersUpdate }];
+/** Home workouts (Oct 2026): adds Home A/B if the program has none. */
+export function homeWorkoutsUpdate(program) {
+  if (program.home) return { program, changes: [] };
+  const unit = program.unit || 'lb';
+  const conv = (list) => list.map((ex) => withUnit(ex, unit));
+  return {
+    program: { ...program, home: { A: conv(HOME_PROGRAM.A), B: conv(HOME_PROGRAM.B) } },
+    changes: [
+      `Added Home A (${HOME_PROGRAM.A.length} exercises) and Home B (${HOME_PROGRAM.B.length}) for dumbbells, pull-up bar, bands and bench`,
+      'Choose Gym or Home on the start screen; edit them under Program → Home',
+    ],
+  };
+}
+
+export const PROGRAM_UPDATES = [
+  { id: 'arms-shoulders-2026-10', title: 'Arms & shoulders focus', apply: armsShouldersUpdate },
+  { id: 'home-workouts-2026-10', title: 'Home workouts', apply: homeWorkoutsUpdate },
+];

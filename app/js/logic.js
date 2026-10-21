@@ -11,6 +11,41 @@ export const BACKUP_REMIND_DAYS = 14;
 const KG_PER_LB = 0.45359237;
 
 export const otherDay = (day) => (day === 'A' ? 'B' : 'A');
+
+// ---------- program structure ----------
+// program = { A: Exercise[], B: Exercise[], home: { A: Exercise[], B: Exercise[] }, unit }
+// Gym days live at the top level (the original shape); home days under `home`.
+// A session's `location` is 'gym' (or absent, for older sessions) or 'home'.
+
+export const SLOTS = [['gym', 'A'], ['gym', 'B'], ['home', 'A'], ['home', 'B']];
+export const locationOf = (session) => (session?.location === 'home' ? 'home' : 'gym');
+export const slotName = (day, location) => (location === 'home' ? `Home ${day}` : `Gym ${day}`);
+
+export function programList(program, day, location = 'gym') {
+  return (location === 'home' ? program?.home?.[day] : program?.[day]) || [];
+}
+
+export function withProgramList(program, day, location, list) {
+  if (location === 'home') return { ...program, home: { A: [], B: [], ...(program.home || {}), [day]: list } };
+  return { ...program, [day]: list };
+}
+
+export function allProgramExercises(program) {
+  return SLOTS.flatMap(([loc, day]) => programList(program, day, loc));
+}
+
+/** Replace every program occurrence of exercise `id` (shared exercises stay in sync). */
+export function updateEverywhere(program, id, ex) {
+  let p = program;
+  for (const [loc, day] of SLOTS) {
+    const list = programList(p, day, loc);
+    if (list.some((x) => x.id === id)) p = withProgramList(p, day, loc, list.map((x) => (x.id === id ? { ...ex } : x)));
+  }
+  return p;
+}
+
+/** Bodyweight and band exercises log reps only. */
+export const repsOnly = (ex) => !!(ex && (ex.bodyweight || ex.band));
 export const isFinished = (s) => !!(s && s.finishedAt);
 
 export function uid() {
@@ -104,16 +139,19 @@ export function topWeight(sets) {
  * repMax, and at least the programmed number of sets was done, suggest
  * top weight + increment. Otherwise suggest the same weight.
  * Returns { weight, increase, lastWeight, last } — weight is null if there is
- * no history or the exercise is bodyweight.
+ * no history or the exercise is reps-only (bodyweight/band). For a band
+ * exercise, `increase` means "move to a stronger band".
  */
 export function suggestWeight(exercise, sessions, opts = {}) {
   const units = opts.units || 'lb';
   const last = lastPerformance(exercise.id, sessions, { ...opts, units, skipDeload: true });
-  if (!last || exercise.bodyweight) return { weight: null, increase: false, lastWeight: null, last };
-  const lastWeight = topWeight(last.sets);
-  if (lastWeight == null) return { weight: null, increase: false, lastWeight: null, last };
+  if (!last) return { weight: null, increase: false, lastWeight: null, last };
   const hitTop =
     last.sets.length >= exercise.sets && last.sets.every((s) => s.reps >= exercise.repMax);
+  // Bands: no weight, but flag "use a stronger band" on the same rule.
+  if (repsOnly(exercise)) return { weight: null, increase: hitTop && !!exercise.band, lastWeight: null, last };
+  const lastWeight = topWeight(last.sets);
+  if (lastWeight == null) return { weight: null, increase: false, lastWeight: null, last };
   const increase = hitTop && exercise.increment > 0;
   return {
     weight: clean(increase ? lastWeight + exercise.increment : lastWeight),
@@ -151,7 +189,7 @@ export function makeEntry(ex, sessions, opts = {}) {
     exerciseId: ex.id,
     name: ex.name,
     target: { ...ex },
-    sets: weights.map((w) => ({ weight: ex.bodyweight ? null : w, reps: null, done: false })),
+    sets: weights.map((w) => ({ weight: repsOnly(ex) ? null : w, reps: null, done: false })),
     note: '',
   };
 }
@@ -161,14 +199,16 @@ export function newSession(day, program, sessions, opts = {}) {
   const now = opts.now ?? Date.now();
   const units = opts.units || 'lb';
   const deload = !!opts.deload;
+  const location = opts.location === 'home' ? 'home' : 'gym';
   return {
     id: opts.id || uid(),
     day,
+    location,
     startedAt: now,
     finishedAt: null,
     deload,
     unit: units,
-    entries: (program[day] || []).map((ex) => makeEntry(ex, sessions, { units, deload })),
+    entries: programList(program, day, location).map((ex) => makeEntry(ex, sessions, { units, deload })),
   };
 }
 
@@ -249,7 +289,7 @@ export function exerciseCatalog(program, sessions) {
   const map = new Map();
   const sorted = sessions.filter(isFinished).sort((a, b) => a.startedAt - b.startedAt);
   for (const s of sorted) for (const e of s.entries) map.set(e.exerciseId, e.name || e.exerciseId);
-  for (const day of ['A', 'B']) for (const ex of program?.[day] || []) map.set(ex.id, ex.name);
+  for (const ex of allProgramExercises(program)) map.set(ex.id, ex.name);
   return map;
 }
 
@@ -266,7 +306,7 @@ export function exerciseHistory(exerciseId, sessions, units = 'lb') {
         reps: Number(x.reps),
       }));
       if (!sets.length && !e.note) return [];
-      return [{ sessionId: s.id, date: s.startedAt, day: s.day, deload: !!s.deload, sets, note: e.note || '', top: topWeight(sets) }];
+      return [{ sessionId: s.id, date: s.startedAt, day: s.day, location: locationOf(s), deload: !!s.deload, sets, note: e.note || '', top: topWeight(sets) }];
     });
 }
 
@@ -278,8 +318,13 @@ export function convertIncrement(inc, from, to) {
 }
 
 export function convertProgramUnits(program, from, to) {
-  const conv = (list) => list.map((ex) => ({ ...ex, increment: convertIncrement(ex.increment, from, to) }));
-  return { ...program, A: conv(program.A), B: conv(program.B), unit: to };
+  let p = { ...program, unit: to };
+  for (const [loc, day] of SLOTS) {
+    if (loc === 'home' && !program.home) continue;
+    p = withProgramList(p, day, loc, programList(program, day, loc)
+      .map((ex) => ({ ...ex, increment: convertIncrement(ex.increment, from, to) })));
+  }
+  return p;
 }
 
 /** Slug id for a new exercise, unique against `taken`. */
@@ -299,10 +344,11 @@ export function fmtNum(n) {
 }
 
 /** "90 lb — 12, 11, 10" or "90 lb × 12, 11 · 85 lb × 10" */
-export function formatSets(sets, unit, { perSide, bodyweight } = {}) {
+export function formatSets(sets, unit, ex = {}) {
   if (!sets?.length) return '';
-  const side = perSide ? '/side' : '';
-  if (bodyweight || sets.every((s) => s.weight == null)) {
+  const side = ex.perSide ? '/side' : '';
+  if (ex.perHand) unit = `${unit} ea`;
+  if (repsOnly(ex) || sets.every((s) => s.weight == null)) {
     return sets.map((s) => s.reps).join(', ') + (side ? ' /side' : ' reps');
   }
   const groups = [];

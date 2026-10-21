@@ -4,11 +4,12 @@ import {
   nextDay, otherDay, suggestWeight, lastPerformance, lastNote, deloadStatus, sessionsThisWeek,
   lastWorkout, backupStatus, newSession, formatSets, formatTarget, fmtNum, isFinished,
   performedSets, exerciseCatalog, exerciseHistory, convertProgramUnits, makeExerciseId, clean, DAY,
-  swapEntry,
+  swapEntry, programList, withProgramList, allProgramExercises, updateEverywhere, repsOnly, locationOf,
+  slotName, SLOTS,
 } from './logic.js';
 import { buildExport, parseImport, planImport, programsEqual, toCSV } from './backup.js';
 import { lineChart } from './chart.js';
-import { PROGRAM_UPDATES } from './updates.js';
+import { PROGRAM_UPDATES, homeWorkoutsUpdate } from './updates.js';
 
 const state = { program: null, settings: null, sessions: [] };
 const app = document.getElementById('app');
@@ -60,6 +61,9 @@ const activeSession = () =>
   state.sessions.filter((s) => !isFinished(s)).sort((a, b) => b.startedAt - a.startedAt)[0] || null;
 const findSession = (id) => state.sessions.find((s) => s.id === id);
 const units = () => state.settings.units;
+const currentLocation = () => (state.program?.home && state.settings.location === 'home' ? 'home' : 'gym');
+// Program definition of an exercise id, from any gym/home day.
+const programDef = (id) => allProgramExercises(state.program).find((x) => x.id === id);
 
 // ---------------------------------------------------------------- persistence
 
@@ -262,7 +266,13 @@ function route() {
     }
     case 'history': view = viewHistory(b === 'exercises' ? 'exercises' : 'sessions'); currentRoute = 'history'; break;
     case 'exercise': view = viewExercise(decodeURIComponent(b || '')); currentRoute = 'exercise'; break;
-    case 'program': view = viewProgram(b === 'B' ? 'B' : 'A'); currentRoute = 'program'; break;
+    case 'program': {
+      const home = b === 'home';
+      const d = home ? parts[2] : b;
+      view = viewProgram(home ? 'home' : 'gym', d === 'B' ? 'B' : 'A');
+      currentRoute = 'program';
+      break;
+    }
     case 'settings': view = viewSettings(); currentRoute = 'settings'; break;
     default: view = viewHome(); currentRoute = '';
   }
@@ -349,23 +359,32 @@ function viewHome() {
     const done = active.entries.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
     const total = active.entries.reduce((n, e) => n + e.sets.length, 0);
     root.append(h('button', { class: 'start', onclick: () => go('#/session') },
-      `Resume Session ${active.day}`, h('small', null, `Started ${fmtTime(active.startedAt)} · ${done}/${total} sets`)));
+      `Resume Session ${active.day}`,
+      h('small', null, `${locationOf(active) === 'home' ? 'Home · ' : ''}Started ${fmtTime(active.startedAt)} · ${done}/${total} sets`)));
   } else {
+    const loc = currentLocation();
+    if (state.program.home) {
+      root.append(h('div', { class: 'seg', role: 'group', 'aria-label': 'Where are you training?' },
+        [['gym', 'Gym'], ['home', 'Home']].map(([l, label]) =>
+          h('button', { 'aria-pressed': String(loc === l), onclick: async () => { await saveSettings({ location: l }); route(); } }, label))));
+    }
+    const count = programList(state.program, next, loc).length;
     root.append(
       h('button', { class: 'start', onclick: () => startSession(next) },
-        `Start Session ${next}`, h('small', null, dl.active ? 'Deload week' : `${state.program[next].length} exercises`)),
+        `Start Session ${next}`,
+        h('small', null, `${loc === 'home' ? 'Home' : 'Gym'} · ${dl.active ? 'Deload week' : `${count} exercises`}`)),
       h('div', { style: 'text-align:center' },
         h('button', { class: 'linkish', onclick: () => startSession(otherDay(next)) }, `Start Session ${otherDay(next)} instead`)));
   }
 
   root.append(h('div', { class: 'stats' },
     h('div', { class: 'stat' }, h('b', null, last ? fmtDate(last.finishedAt, { weekday: undefined }) : '—'),
-      h('span', null, last ? `Last workout (${last.day})` : 'No workouts yet')),
+      h('span', null, last ? `Last workout (${last.day}${locationOf(last) === 'home' ? ' · Home' : ''})` : 'No workouts yet')),
     h('div', { class: 'stat' }, h('b', null, `${sessionsThisWeek(state.sessions, now)} / 3`), h('span', null, 'Sessions this week'))));
 
   root.append(h('nav', { class: 'nav' },
     h('a', { href: '#/history' }, 'History'),
-    h('a', { href: '#/program' }, 'Program'),
+    h('a', { href: currentLocation() === 'home' ? '#/program/home/A' : '#/program' }, 'Program'),
     h('a', { href: '#/settings' }, h('span', null, 'Settings & backup',
       h('span', { class: 'muted small' }, dl.anchor && !dl.active ? ` · ${dl.weeks} wk since deload` : '')))));
   return root;
@@ -374,7 +393,7 @@ function viewHome() {
 async function startSession(day) {
   if (activeSession()) return go('#/session');
   const dl = deloadStatus(state.settings, state.sessions);
-  const s = newSession(day, state.program, state.sessions, { units: units(), deload: dl.active });
+  const s = newSession(day, state.program, state.sessions, { units: units(), deload: dl.active, location: currentLocation() });
   state.sessions.push(s);
   await db.putSession(s);
   ls.del(`scroll:session/${s.id}`);
@@ -398,7 +417,7 @@ function viewSession(session) {
 
   const header = h('header', { class: 'top' },
     h('a', { class: 'icon-btn', href: live ? '#/' : '#/history', 'aria-label': 'Back' }, '‹'),
-    h('h1', null, `Session ${session.day}`, progress));
+    h('h1', null, `Session ${session.day}${locationOf(session) === 'home' ? ' · Home' : ''}`, progress));
 
   const root = h('div', { class: 'session' }, header);
   session.entries.forEach((e, i) => root.append(exerciseCard(session, i, live, save)));
@@ -427,9 +446,10 @@ function viewSession(session) {
 function exerciseCard(session, ei, live, save) {
   const e = session.entries[ei];
   const unit = session.unit;
-  const ex = e.target || state.program.A.concat(state.program.B).find((x) => x.id === e.exerciseId) ||
+  const ex = e.target || programDef(e.exerciseId) ||
     { id: e.exerciseId, name: e.name, sets: e.sets.length, repMin: 0, repMax: 0, increment: 5, restSec: 90 };
-  const bw = !!ex.bodyweight;
+  const bw = repsOnly(ex);
+  const wUnit = ex.perHand ? `${unit} ea` : unit;
   const opts = { units: unit, before: session.startedAt, excludeId: session.id };
   const last = lastPerformance(e.exerciseId, state.sessions, opts);
   const sug = live ? suggestWeight(ex, state.sessions, opts) : null;
@@ -446,7 +466,8 @@ function exerciseCard(session, ei, live, save) {
     h('div', { class: 'meta' },
       h('span', { class: 'target' }, formatTarget({ ...ex, sets: e.sets.length }, false)),
       h('span', { class: 'muted' }, `${ex.restSec}s rest`),
-      sug?.increase ? h('span', { class: 'badge-up' }, `↑ Add ${fmtNum(ex.increment)} ${unit}`) : null),
+      sug?.increase ? h('span', { class: 'badge-up' }, ex.band ? '↑ Stronger band' : `↑ Add ${fmtNum(ex.increment)} ${wUnit}`) : null,
+      ex.band ? h('span', { class: 'tag' }, 'BAND') : null),
     h('div', { class: 'last' },
       last
         ? [`Last${last.deload ? ' (deload)' : ''} ${fmtDate(last.date, { weekday: undefined })}: `,
@@ -478,7 +499,7 @@ function exerciseCard(session, ei, live, save) {
     weightInputs.length = 0;
     setsEl.replaceChildren(h('div', { class: `set-head${bw ? ' bw' : ''}`, 'aria-hidden': 'true' },
       h('span', null, '#'),
-      bw ? null : h('span', { style: 'text-align:center' }, unit),
+      bw ? null : h('span', { style: 'text-align:center' }, wUnit),
       h('span', { class: 'c-reps' }, ex.perSide ? 'Reps /side' : 'Reps'),
       h('span', { class: 'c-done' }, 'Done')));
     e.sets.forEach((s, si) => setsEl.append(setRow(s, si)));
@@ -501,7 +522,7 @@ function exerciseCard(session, ei, live, save) {
     if (!bw) {
       const w = h('input', {
         class: 'num', type: 'text', inputmode: 'decimal', autocomplete: 'off',
-        'aria-label': `Set ${si + 1} weight (${unit})`, placeholder: '—', value: fmtNum(s.weight),
+        'aria-label': `Set ${si + 1} weight (${wUnit})`, placeholder: '—', value: fmtNum(s.weight),
         oninput: () => {
           const old = s.weight;
           s.weight = parseNum(w.value);
@@ -571,12 +592,24 @@ function exerciseCard(session, ei, live, save) {
 
 // Definition for an exercise id: program first, else its most recent session snapshot.
 function exerciseDef(id) {
-  const inProgram = state.program.A.concat(state.program.B).find((x) => x.id === id);
+  const inProgram = programDef(id);
   if (inProgram) return { ...inProgram };
   const snap = state.sessions.filter((s) => s.entries.some((e) => e.exerciseId === id))
     .sort((a, b) => b.startedAt - a.startedAt)[0]?.entries.find((e) => e.exerciseId === id);
   return snap?.target ? { ...snap.target } : { id, name: snap?.name || id, sets: 2, repMin: 10, repMax: 12, restSec: 60, increment: 5 };
 }
+
+// How an exercise is loaded, as one choice in forms; stored as flags.
+const LOAD_TYPES = [
+  ['weight', 'Weight (machine, cable, barbell)'],
+  ['dumbbell', 'Dumbbells (weight per hand)'],
+  ['bodyweight', 'Bodyweight (reps only)'],
+  ['band', 'Band (reps only)'],
+];
+const loadOf = (ex) => (ex?.band ? 'band' : ex?.bodyweight ? 'bodyweight' : ex?.perHand ? 'dumbbell' : 'weight');
+const loadFlags = (load) => ({ bodyweight: load === 'bodyweight', band: load === 'band', perHand: load === 'dumbbell' });
+const loadSelect = (value) => h('select', { class: 'field' },
+  LOAD_TYPES.map(([v, label]) => h('option', { value: v, selected: v === value }, label)));
 
 // Inline form that replaces an exercise card to swap it mid-workout.
 function swapPanel(session, ei) {
@@ -597,17 +630,18 @@ function swapPanel(session, ei) {
     increment: num(base.increment || (units() === 'kg' ? 2.5 : 5), 'decimal'),
   };
   const perSide = h('input', { type: 'checkbox' });
-  const bodyweight = h('input', { type: 'checkbox' });
+  const load = loadSelect(loadOf(base));
   const fields = h('div', { class: 'form' },
     h('label', null, 'Name', name),
+    h('label', null, 'Load', load),
     h('div', { class: 'grid2' }, h('label', null, 'Sets', f.sets), h('label', null, 'Rest (sec)', f.restSec)),
     h('div', { class: 'grid2' }, h('label', null, 'Reps min', f.repMin), h('label', null, 'Reps max', f.repMax)),
     h('label', null, `Increment (${units()})`, f.increment),
-    h('label', { class: 'check' }, perSide, 'Reps per side'),
-    h('label', { class: 'check' }, bodyweight, 'Bodyweight (reps only)'));
+    h('label', { class: 'check' }, perSide, 'Reps per side'));
   pick.addEventListener('change', () => { fields.hidden = !!pick.value; });
 
-  const inProgram = state.program[session.day].some((x) => x.id === e.exerciseId);
+  const loc = locationOf(session);
+  const inProgram = programList(state.program, session.day, loc).some((x) => x.id === e.exerciseId);
   const permanent = h('input', { type: 'checkbox' });
 
   async function doSwap() {
@@ -622,9 +656,9 @@ function swapPanel(session, ei) {
         id: makeExerciseId(nm, new Set([...cat.keys(), ...inSession])), name: nm, cue: '',
         sets: Math.max(1, Math.round(n(f.sets, 2))), restSec: Math.max(0, Math.round(n(f.restSec, 60))),
         repMin: Math.max(1, Math.round(n(f.repMin, 10))), repMax: Math.max(1, Math.round(n(f.repMax, 12))),
-        increment: bodyweight.checked ? 0 : Math.max(0, n(f.increment, 5)),
-        perSide: perSide.checked, bodyweight: bodyweight.checked,
+        perSide: perSide.checked, ...loadFlags(load.value),
       };
+      ex.increment = repsOnly(ex) ? 0 : Math.max(0, n(f.increment, 5));
       if (ex.repMax < ex.repMin) [ex.repMin, ex.repMax] = [ex.repMax, ex.repMin];
     }
     const r = swapEntry(session, ei, ex, state.sessions);
@@ -632,8 +666,8 @@ function swapPanel(session, ei) {
     autosave(session);
     await flushSave(session.id);
     if (permanent.checked) {
-      const list = state.program[session.day].map((x) => (x.id === e.exerciseId ? { ...ex } : x));
-      await saveProgram({ ...state.program, [session.day]: list });
+      const list = programList(state.program, session.day, loc).map((x) => (x.id === e.exerciseId ? { ...ex } : x));
+      await saveProgram(withProgramList(state.program, session.day, loc, list));
     }
     toast(r.kept ? `${e.name} kept (has sets) · ${ex.name} added` : `Swapped to ${ex.name}`);
     route();
@@ -645,7 +679,7 @@ function swapPanel(session, ei) {
     h('div', { class: 'form', style: 'margin-top:10px' },
       h('label', null, 'Replace with', pick),
       fields,
-      inProgram ? h('label', { class: 'check' }, permanent, `Also replace it in the Session ${session.day} program`) : null,
+      inProgram ? h('label', { class: 'check' }, permanent, `Also replace it in the ${slotName(session.day, loc)} program`) : null,
       h('div', { class: 'row' },
         h('button', { class: 'btn primary', onclick: doSwap }, 'Swap'),
         h('button', { class: 'btn', onclick: () => route() }, 'Cancel'))),
@@ -706,7 +740,7 @@ function viewHistory(tab) {
       const mins = Math.round((s.finishedAt - s.startedAt) / 60000);
       return h('a', { href: `#/session/${s.id}` },
         h('div', null,
-          h('div', { class: 'l1' }, `${fmtDate(s.startedAt, { year: 'numeric' })} · ${s.day} `, s.deload ? h('span', { class: 'tag deload' }, 'DELOAD') : null),
+          h('div', { class: 'l1' }, `${fmtDate(s.startedAt, { year: 'numeric' })} · ${s.day}${locationOf(s) === 'home' ? ' · Home' : ''} `, s.deload ? h('span', { class: 'tag deload' }, 'DELOAD') : null),
           h('div', { class: 'l2' }, `${sets} sets · ${mins} min`)));
     })));
   } else {
@@ -727,7 +761,7 @@ function viewHistory(tab) {
 function viewExercise(id) {
   const cat = exerciseCatalog(state.program, state.sessions);
   const name = cat.get(id) || id;
-  const ex = state.program.A.concat(state.program.B).find((x) => x.id === id) || {};
+  const ex = programDef(id) || exerciseDef(id);
   const hist = exerciseHistory(id, state.sessions, units());
   const root = h('div', null, topBar(name, { back: '#/history/exercises' }));
   if (!hist.length) {
@@ -738,12 +772,12 @@ function viewExercise(id) {
   const points = hist.map((x) => ({ x: x.date, y: weighted ? x.top : x.sets.reduce((n, s) => n + s.reps, 0) }))
     .filter((p) => p.y != null);
   root.append(h('div', { class: 'card' },
-    h('h2', null, weighted ? `Top-set weight (${units()})` : 'Total reps'),
+    h('h2', null, weighted ? `Top-set weight (${units()}${ex.perHand ? ' each' : ''})` : 'Total reps'),
     lineChart(points, { label: `${name} progress chart` })));
   root.append(h('div', { class: 'list' }, [...hist].reverse().map((x) =>
     h('a', { href: `#/session/${x.sessionId}` },
       h('div', null,
-        h('div', { class: 'l1' }, `${fmtDate(x.date, { year: 'numeric' })} · ${x.day}`, x.deload ? ' · deload' : ''),
+        h('div', { class: 'l1' }, `${fmtDate(x.date, { year: 'numeric' })} · ${x.day}${x.location === 'home' ? ' · Home' : ''}`, x.deload ? ' · deload' : ''),
         h('div', { class: 'l2' }, formatSets(x.sets, units(), ex) || '—'),
         x.note ? h('div', { class: 'l2' }, `“${x.note}”`) : null)))));
   return root;
@@ -751,106 +785,119 @@ function viewExercise(id) {
 
 // ---------------------------------------------------------------- program editor
 
-let editing = null; // { day, index, mode: 'edit'|'add'|'swap' }
+let editing = null; // { loc, day, index, mode: 'edit'|'add'|'swap' }
 
-function viewProgram(day) {
-  const list = state.program[day];
+const progHash = (loc, day) => (loc === 'home' ? `#/program/home/${day}` : `#/program/${day}`);
+const isEditing = (loc, day) => editing && editing.loc === loc && editing.day === day;
+const loadLabel = (ex) => (ex.band ? 'band' : ex.bodyweight ? 'bodyweight'
+  : `+${fmtNum(ex.increment)} ${units()}${ex.perHand ? ' ea' : ''}`);
+// Other program days that also contain this exercise id (shared history).
+const otherSlotsWith = (id, loc, day) => SLOTS
+  .filter(([l, d]) => !(l === loc && d === day) && programList(state.program, d, l).some((x) => x.id === id))
+  .map(([l, d]) => slotName(d, l));
+
+function viewProgram(loc, day) {
+  const list = programList(state.program, day, loc);
   const root = h('div', null, topBar('Program'));
-  root.append(h('div', { class: 'seg' },
-    ['A', 'B'].map((d) => h('button', { 'aria-pressed': String(d === day), onclick: () => { editing = null; go(`#/program/${d}`); } }, `Session ${d}`))));
+  const nav = (l, d) => () => { editing = null; go(progHash(l, d)); };
+  root.append(
+    h('div', { class: 'seg', role: 'group', 'aria-label': 'Location' },
+      [['gym', 'Gym'], ['home', 'Home']].map(([l, label]) =>
+        h('button', { 'aria-pressed': String(l === loc), onclick: nav(l, day) }, label))),
+    h('div', { class: 'seg', role: 'group', 'aria-label': 'Day', style: 'margin-top:8px' },
+      ['A', 'B'].map((d) => h('button', { 'aria-pressed': String(d === day), onclick: nav(loc, d) }, `Session ${d}`))));
   root.append(h('p', { class: 'muted small' },
     `Weights and increments in ${units()}. Renaming keeps history; “Swap” starts a new exercise and leaves the old history under the old one.`));
 
   list.forEach((ex, i) => {
-    if (editing && editing.day === day && editing.index === i && editing.mode !== 'add') {
-      root.append(exerciseForm(day, i, editing.mode));
+    if (isEditing(loc, day) && editing.index === i && editing.mode !== 'add') {
+      root.append(exerciseForm(loc, day, i, editing.mode));
       return;
     }
-    const sharedIn = state.program[otherDay(day)].some((x) => x.id === ex.id);
+    const shared = otherSlotsWith(ex.id, loc, day);
     root.append(h('div', { class: 'card prog-item' },
-      h('h2', null, ex.name, sharedIn ? h('span', { class: 'tag', style: 'margin-left:6px' }, `ALSO ${otherDay(day)}`) : null),
+      h('h2', null, ex.name, shared.map((name) => h('span', { class: 'tag', style: 'margin-left:6px' }, `ALSO ${name.toUpperCase()}`))),
       ex.cue ? h('p', { class: 'cue' }, ex.cue) : null,
-      h('div', { class: 'meta muted' },
-        `${formatTarget(ex)} · ${ex.restSec}s rest · ${ex.bodyweight ? 'bodyweight' : `+${fmtNum(ex.increment)} ${units()}`}`),
+      h('div', { class: 'meta muted' }, `${formatTarget(ex)} · ${ex.restSec}s rest · ${loadLabel(ex)}`),
       h('div', { class: 'row' },
-        h('button', { class: 'btn small', disabled: i === 0, 'aria-label': 'Move up', onclick: () => move(day, i, -1) }, '↑'),
-        h('button', { class: 'btn small', disabled: i === list.length - 1, 'aria-label': 'Move down', onclick: () => move(day, i, 1) }, '↓'),
-        h('button', { class: 'btn small', onclick: () => { editing = { day, index: i, mode: 'edit' }; route(); } }, 'Edit'),
-        h('button', { class: 'btn small', onclick: () => { editing = { day, index: i, mode: 'swap' }; route(); } }, 'Swap'),
-        h('button', { class: 'btn small danger', 'aria-label': `Remove ${ex.name}`, onclick: () => removeEx(day, i) }, '✕'))));
+        h('button', { class: 'btn small', disabled: i === 0, 'aria-label': 'Move up', onclick: () => move(loc, day, i, -1) }, '↑'),
+        h('button', { class: 'btn small', disabled: i === list.length - 1, 'aria-label': 'Move down', onclick: () => move(loc, day, i, 1) }, '↓'),
+        h('button', { class: 'btn small', onclick: () => { editing = { loc, day, index: i, mode: 'edit' }; route(); } }, 'Edit'),
+        h('button', { class: 'btn small', onclick: () => { editing = { loc, day, index: i, mode: 'swap' }; route(); } }, 'Swap'),
+        h('button', { class: 'btn small danger', 'aria-label': `Remove ${ex.name}`, onclick: () => removeEx(loc, day, i) }, '✕'))));
   });
 
-  if (editing && editing.day === day && editing.mode === 'add') root.append(exerciseForm(day, list.length, 'add'));
+  if (isEditing(loc, day) && editing.mode === 'add') root.append(exerciseForm(loc, day, list.length, 'add'));
   else {
-    root.append(h('button', { class: 'btn primary block', style: 'margin-top:16px', onclick: () => { editing = { day, index: list.length, mode: 'add' }; route(); } }, '+ Add exercise'));
+    root.append(h('button', { class: 'btn primary block', style: 'margin-top:16px', onclick: () => { editing = { loc, day, index: list.length, mode: 'add' }; route(); } }, '+ Add exercise'));
   }
   return root;
 }
 
-async function move(day, i, d) {
-  const list = [...state.program[day]];
+async function move(loc, day, i, d) {
+  const list = [...programList(state.program, day, loc)];
   [list[i], list[i + d]] = [list[i + d], list[i]];
-  await saveProgram({ ...state.program, [day]: list });
+  await saveProgram(withProgramList(state.program, day, loc, list));
   route();
 }
 
-async function removeEx(day, i) {
-  const ex = state.program[day][i];
-  if (!confirm(`Remove ${ex.name} from Session ${day}? Its history is kept.`)) return;
-  await saveProgram({ ...state.program, [day]: state.program[day].filter((_, j) => j !== i) });
+async function removeEx(loc, day, i) {
+  const list = programList(state.program, day, loc);
+  if (!confirm(`Remove ${list[i].name} from ${slotName(day, loc)}? Its history is kept.`)) return;
+  await saveProgram(withProgramList(state.program, day, loc, list.filter((_, j) => j !== i)));
   route();
 }
 
-function exerciseForm(day, index, mode) {
-  const orig = mode === 'add' ? null : state.program[day][index];
+function exerciseForm(loc, day, index, mode) {
+  const list = programList(state.program, day, loc);
+  const orig = mode === 'add' ? null : list[index];
   const base = mode === 'edit' ? orig : {
     name: '', cue: '', sets: orig?.sets ?? 2, repMin: orig?.repMin ?? 10, repMax: orig?.repMax ?? 12,
-    restSec: orig?.restSec ?? 60, increment: orig?.increment ?? (units() === 'kg' ? 2.5 : 5), perSide: false, bodyweight: false,
+    restSec: orig?.restSec ?? 60, increment: orig?.increment || (units() === 'kg' ? 2.5 : 5), perSide: false,
+    perHand: loc === 'home',
   };
   const f = {};
   const field = (key, label, attrs = {}) => {
     f[key] = h('input', { class: 'field', value: base[key] ?? '', ...attrs });
     return h('label', null, label, f[key]);
   };
-  const check = (key, label) => {
-    f[key] = h('input', { type: 'checkbox', checked: !!base[key] });
-    return h('label', { class: 'check' }, f[key], label);
-  };
+  f.perSide = h('input', { type: 'checkbox', checked: !!base.perSide });
+  f.load = loadSelect(loadOf(base));
 
   // Reuse an existing exercise (shares its history), e.g. biceps curl on both days.
   let reuse = null;
   if (mode !== 'edit') {
-    const inDay = new Set(state.program[day].map((x) => x.id));
+    const inDay = new Set(list.map((x) => x.id));
     const cat = exerciseCatalog(state.program, state.sessions);
-    const opts = [...cat.entries()].filter(([id]) => !inDay.has(id));
+    const opts = [...cat.entries()].filter(([id]) => !inDay.has(id)).sort((a, b) => a[1].localeCompare(b[1]));
     if (opts.length) {
       reuse = h('select', { class: 'field' },
         h('option', { value: '' }, 'New exercise'),
         opts.map(([id, name]) => h('option', { value: id }, name)));
       reuse.addEventListener('change', () => {
-        const ex = state.program.A.concat(state.program.B).find((x) => x.id === reuse.value);
-        const name = cat.get(reuse.value);
         if (!reuse.value) return;
-        f.name.value = name;
-        if (ex) for (const k of ['cue', 'sets', 'repMin', 'repMax', 'restSec', 'increment']) f[k].value = ex[k] ?? '';
-        if (ex) { f.perSide.checked = !!ex.perSide; f.bodyweight.checked = !!ex.bodyweight; }
+        const ex = exerciseDef(reuse.value);
+        f.name.value = ex.name;
+        for (const k of ['cue', 'sets', 'repMin', 'repMax', 'restSec', 'increment']) f[k].value = ex[k] ?? '';
+        f.perSide.checked = !!ex.perSide;
+        f.load.value = loadOf(ex);
       });
     }
   }
 
+  const shared = mode === 'edit' ? otherSlotsWith(orig.id, loc, day) : [];
   const num = { type: 'text', inputmode: 'decimal' };
   const form = h('form', { class: 'card form', onsubmit: (ev) => { ev.preventDefault(); submit(); } },
-    h('h2', null, mode === 'edit' ? `Edit ${orig.name}` : mode === 'swap' ? `Swap out ${orig.name}` : `Add to Session ${day}`),
+    h('h2', null, mode === 'edit' ? `Edit ${orig.name}` : mode === 'swap' ? `Swap out ${orig.name}` : `Add to ${slotName(day, loc)}`),
     reuse ? h('label', null, 'Exercise', reuse) : null,
     field('name', 'Name', { required: true, autocomplete: 'off' }),
     field('cue', 'Cue (optional)', { autocomplete: 'off' }),
+    h('label', null, 'Load', f.load),
     h('div', { class: 'grid2' }, field('sets', 'Sets', { ...num, inputmode: 'numeric' }), field('restSec', 'Rest (sec)', { ...num, inputmode: 'numeric' })),
     h('div', { class: 'grid2' }, field('repMin', 'Reps min', { ...num, inputmode: 'numeric' }), field('repMax', 'Reps max', { ...num, inputmode: 'numeric' })),
     field('increment', `Increment (${units()})`, num),
-    check('perSide', 'Reps per side'),
-    check('bodyweight', 'Bodyweight (reps only)'),
-    mode === 'edit' && state.program[otherDay(day)].some((x) => x.id === orig.id)
-      ? h('p', { class: 'muted small' }, `Also in Session ${otherDay(day)}: changes apply to both.`) : null,
+    h('label', { class: 'check' }, f.perSide, 'Reps per side'),
+    shared.length ? h('p', { class: 'muted small' }, `Also in ${shared.join(', ')}: changes apply there too.`) : null,
     h('div', { class: 'row' },
       h('button', { class: 'btn primary', type: 'submit' }, 'Save'),
       h('button', { class: 'btn', type: 'button', onclick: () => { editing = null; route(); } }, 'Cancel')));
@@ -861,12 +908,11 @@ function exerciseForm(day, index, mode) {
       name: f.name.value.trim(), cue: f.cue.value.trim(),
       sets: Math.max(1, Math.round(n('sets', 1))), restSec: Math.max(0, Math.round(n('restSec', 60))),
       repMin: Math.max(1, Math.round(n('repMin', 1))), repMax: Math.max(1, Math.round(n('repMax', 1))),
-      increment: Math.max(0, n('increment', 0)),
-      perSide: f.perSide.checked, bodyweight: f.bodyweight.checked,
+      perSide: f.perSide.checked, ...loadFlags(f.load.value),
     };
     if (!fields.name) return alert('Name is required.');
     if (fields.repMax < fields.repMin) [fields.repMin, fields.repMax] = [fields.repMax, fields.repMin];
-    if (fields.bodyweight) fields.increment = 0;
+    fields.increment = repsOnly(fields) ? 0 : Math.max(0, n('increment', 0));
 
     let id;
     if (mode === 'edit') id = orig.id;
@@ -876,12 +922,11 @@ function exerciseForm(day, index, mode) {
       id = makeExerciseId(fields.name, taken);
     }
     const ex = { id, ...fields };
-    const program = { ...state.program, A: [...state.program.A], B: [...state.program.B] };
-    if (mode === 'add') program[day].push(ex);
-    else program[day][index] = ex;
-    // keep shared exercises (same id on both days) in sync
-    const od = otherDay(day);
-    program[od] = program[od].map((x) => (x.id === id ? { ...ex } : x));
+    const next = [...list];
+    if (mode === 'add') next.push(ex);
+    else next[index] = ex;
+    // keep shared exercises (same id on other days) in sync
+    const program = updateEverywhere(withProgramList(state.program, day, loc, next), id, ex);
     editing = null;
     await saveProgram(program);
     toast('Program saved');
@@ -1015,7 +1060,9 @@ async function importJSON(input) {
   if (toWrite.length) await db.putSessions(toWrite);
   if (progDiff && confirm('Replace your current program with the one from the backup?\n\nCancel keeps your current program.')) {
     const incomingUnit = data.program.unit || data.settings?.units || 'lb';
-    await saveProgram({ ...data.program, unit: incomingUnit });
+    // Backups from before home workouts existed get the default home days.
+    const incoming = { ...data.program, unit: incomingUnit };
+    await saveProgram(incoming.home ? incoming : homeWorkoutsUpdate(incoming).program);
     await saveSettings({ units: incomingUnit });
   }
   const inc = data.settings || {};
@@ -1059,17 +1106,31 @@ async function load() {
 // kept so the home-screen notice can offer Undo.
 async function applyProgramUpdates() {
   const applied = new Set(state.settings.appliedUpdates || []);
-  for (const u of PROGRAM_UPDATES) {
-    if (applied.has(u.id)) continue;
+  const pending = PROGRAM_UPDATES.filter((u) => !applied.has(u.id));
+  if (!pending.length) return;
+  const before = state.program;
+  let program = before;
+  const titles = [];
+  const changes = [];
+  for (const u of pending) {
     applied.add(u.id);
-    const { program, changes } = u.apply(state.program);
-    if (changes.length) {
-      await db.setKV(`programBackup:${u.id}`, state.program);
-      await saveProgram(program);
-      state.settings.programNotice = { id: u.id, title: u.title, changes };
-    }
-    await saveSettings({ appliedUpdates: [...applied] });
+    const r = u.apply(program);
+    if (r.changes.length) { program = r.program; titles.push(u.title); changes.push(...r.changes); }
   }
+  if (changes.length) {
+    // One notice (and one Undo) for everything applied on this launch, merged
+    // with a notice the user hasn't dismissed yet.
+    const prev = state.settings.programNotice;
+    const id = pending[pending.length - 1].id;
+    await db.setKV(`programBackup:${id}`, prev ? (await db.getKV(`programBackup:${prev.id}`)) || before : before);
+    await saveProgram(program);
+    state.settings.programNotice = {
+      id,
+      title: [prev?.title, ...titles].filter(Boolean).join(' + '),
+      changes: [...(prev?.changes || []), ...changes],
+    };
+  }
+  await saveSettings({ appliedUpdates: [...applied] });
 }
 
 async function undoProgramUpdate(notice) {
