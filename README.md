@@ -17,6 +17,8 @@ app/                    ← the deployable static site
   css/app.css
   js/seed.js            default program (gym + home) + settings
   js/updates.js         one-time program updates for existing installs
+  js/cut-config.js      fat-loss phase plan: every number the cut module uses
+  js/cut.js             pure cut logic: week math, averages, e1RM, Sunday rule engine, checkpoints
   js/logic.js           pure logic: nextDay, suggestWeight, lastPerformance, deloadStatus, …
   js/backup.js          pure export/import planning + CSV
   js/db.js              IndexedDB wrapper
@@ -81,8 +83,27 @@ iOS can delete website data for sites that go unused. Installing to the Home Scr
 - **Rest timer**: ticking a set starts it. It vibrates where supported (not on iOS), beeps (optional; iOS mutes it with the silent switch), and flashes the bar. While a session is open, Screen Wake Lock keeps the display on where supported.
 - **Units**: lb by default; switch to kg in settings. Each session records its unit and is converted for display and suggestions. Program increments convert too (5 lb ↔ 2.5 kg).
 
+## Cut tracking
+
+A 12-week fat-loss phase module. It **recommends** calorie changes every Sunday from fixed rules; it never changes the target until you tap **Accept**.
+
+- **Plan**: all numbers live in `app/js/cut-config.js` (`DEFAULT_CUT_CONFIG`). The device keeps an edited copy (Settings → Cut plan); missing keys fall back to the defaults.
+- **Logging**: daily weigh-in on the home screen (one per date; a second entry asks before replacing), optional body fat % (display only, never used by rules) and note. Waist on the Sunday check-in, two readings averaged. Holidays and 3-5 main lifts under cut settings. Main lifts reuse your logged workout sets; no separate lift log.
+- **Weeks**: week N is the Mon-Sun ending on the Nth Sunday after the start date. Dates are stored as local `YYYY-MM-DD` days, so DST can't move a weigh-in between weeks.
+- **Rules** (`evaluateWeek` in `cut.js`), from week `firstRuleWeek` on, over this week plus the previous non-skipped week(s):
+  1. Skip a week with a holiday or fewer than `minWeighinsPerWeek` weigh-ins. It neither counts toward nor resets a streak.
+  2. Slow loss (< 0.5 lb/wk) both weeks and main lifts down this week → no change, review sleep/recovery/intake.
+  3. Loss > 1.25 lb/wk or main lifts down, both weeks → +150 kcal.
+  4. Slow loss both weeks → −150 kcal, unless that goes below the floor ("At calorie floor: review plan").
+  5. Otherwise on track.
+  Only weeks ≥ `firstRuleWeek` count toward a streak, so the earliest recommendation is week 4. Accepting resets the streaks; dismissing doesn't.
+- **Strength**: Epley e1RM `weight × (1 + reps/30)` from sets of 1-12 reps, kg sessions converted to lb. A lift is down when its best e1RM is more than 2% below the previous week's; main lifts are down when more than half of those trained in both weeks are.
+- **Weekly change** is the previous week's average minus this week's (week 1 vs the start weight). If the previous week has too few weigh-ins, the last full week is used, divided by the weeks between.
+- **Checkpoints** pass when that week's average weight and that Sunday's waist (or the latest in the 7 days before) are both at or under the max.
+- **Dashboard** (`#/cut`): weight chart (daily dots, 7-day average shown with 4+ entries in the window, dashed target line, shaded on-track band, checkpoints, holidays), waist chart with goal range, best e1RM per week per main lift, status tiles, and a weekly table. Tap or drag a chart to read values.
+
 ## Backup format
 
-The JSON export holds `{ format: "ab-gym-tracker", version: 1, exportedAt, program, settings, sessions }`. Import merges by session id: new sessions are added; sessions that already exist with different content are only replaced if you confirm; a different program is only applied if you confirm.
+The JSON export holds `{ format: "ab-gym-tracker", version: 2, exportedAt, program, settings, sessions, cut }`. Version 1 files (no `cut`) still import. Cut entries missing on this device are added; entries that differ, and a different plan or main-lift list, are only replaced if you confirm. Import merges by session id: new sessions are added; sessions that already exist with different content are only replaced if you confirm; a different program is only applied if you confirm.
 
 The CSV export has columns `date, session, exercise, set, weight, reps, note, unit, deload, location`.

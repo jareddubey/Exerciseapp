@@ -14,6 +14,8 @@ const ASSETS = [
   './js/seed.js',
   './js/chart.js',
   './js/updates.js',
+  './js/cut.js',
+  './js/cut-config.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',

@@ -2,9 +2,10 @@
 import { isFinished, performedSets, locationOf } from './logic.js';
 
 export const EXPORT_FORMAT = 'ab-gym-tracker';
-export const EXPORT_VERSION = 1;
+// v2 adds `cut` (the fat-loss phase record). v1 files still import.
+export const EXPORT_VERSION = 2;
 
-export function buildExport({ program, settings, sessions }, now = Date.now()) {
+export function buildExport({ program, settings, sessions, cut }, now = Date.now()) {
   return {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
@@ -12,6 +13,7 @@ export function buildExport({ program, settings, sessions }, now = Date.now()) {
     program,
     settings,
     sessions,
+    cut: cut ?? null,
   };
 }
 
@@ -42,6 +44,7 @@ export function parseImport(text) {
   const bad = data.sessions.filter((s) => !validSession(s));
   if (bad.length) throw new Error(`Backup contains ${bad.length} malformed session(s).`);
   if (data.program != null && !validProgram(data.program)) throw new Error('Backup program is malformed.');
+  if (data.cut != null && (typeof data.cut !== 'object' || Array.isArray(data.cut))) throw new Error('Backup cut data is malformed.');
   return data;
 }
 
@@ -66,6 +69,53 @@ export function planImport(current, incoming) {
     else conflicts.push(s);
   }
   return { added, conflicts, identical };
+}
+
+const byKey = (list, key) => new Map((list || []).map((x) => [key(x), x]));
+const changeKey = (c) => `${c.week}|${c.date}`;
+
+/**
+ * Merge an imported cut record into the current one. Dated entries (weigh-ins,
+ * waist, holidays, calorie changes) missing here are added; ones that differ
+ * are conflicts, taken from the backup only if `replace`. With `replace`, the
+ * backup's plan settings and main lifts are taken too.
+ * Returns { cut, added, conflicts }.
+ */
+export function mergeCut(current, incoming, { replace = false } = {}) {
+  if (!incoming) return { cut: current, added: 0, conflicts: 0 };
+  let added = 0;
+  let conflicts = 0;
+  const mergeMap = (mine = {}, theirs = {}) => {
+    const out = { ...mine };
+    for (const [k, v] of Object.entries(theirs || {})) {
+      if (!(k in out)) { out[k] = v; added++; } else if (stable(out[k]) !== stable(v)) { conflicts++; if (replace) out[k] = v; }
+    }
+    return out;
+  };
+  const mergeList = (mine, theirs, key) => {
+    const m = byKey(mine, key);
+    for (const x of theirs || []) {
+      const k = key(x);
+      if (!m.has(k)) { m.set(k, x); added++; } else if (stable(m.get(k)) !== stable(x)) { conflicts++; if (replace) m.set(k, x); }
+    }
+    return [...m.values()].sort((a, b) => (key(a) < key(b) ? -1 : 1));
+  };
+  const planDiffers = stable(current.config) !== stable(incoming.config ?? current.config) ||
+    stable(current.mainLifts) !== stable(incoming.mainLifts ?? current.mainLifts);
+  if (planDiffers) conflicts++;
+  const cut = {
+    ...current,
+    weighins: mergeMap(current.weighins, incoming.weighins),
+    waist: mergeMap(current.waist, incoming.waist),
+    holidays: mergeList(current.holidays, incoming.holidays, (x) => x.date),
+    calorieChanges: mergeList(current.calorieChanges, incoming.calorieChanges, changeKey),
+    dismissed: { ...(incoming.dismissed || {}), ...(current.dismissed || {}) },
+  };
+  if (replace && planDiffers) {
+    if (incoming.config) cut.config = incoming.config;
+    if (incoming.mainLifts) cut.mainLifts = incoming.mainLifts;
+  }
+  return { cut, added, conflicts };
 }
 
 export function programsEqual(a, b) {
