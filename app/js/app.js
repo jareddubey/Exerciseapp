@@ -4,7 +4,7 @@ import {
   nextDay, otherDay, suggestWeight, lastPerformance, lastNote, deloadStatus, sessionsThisWeek,
   lastWorkout, backupStatus, newSession, formatSets, formatTarget, fmtNum, isFinished,
   performedSets, exerciseCatalog, exerciseHistory, convertProgramUnits, makeExerciseId, clean, DAY,
-  swapEntry, programList, withProgramList, allProgramExercises, updateEverywhere, repsOnly, locationOf,
+  swapEntry, editEntry, programList, withProgramList, allProgramExercises, updateEverywhere, repsOnly, locationOf,
   slotName, SLOTS,
 } from './logic.js';
 import { buildExport, parseImport, planImport, programsEqual, toCSV, mergeCut } from './backup.js';
@@ -588,7 +588,11 @@ function exerciseCard(session, ei, live, save) {
       },
     }, '− Set'),
     live ? h('button', {
-      class: 'btn small', style: 'margin-left:auto', 'aria-label': `Swap ${e.name} for another exercise`,
+      class: 'btn small', style: 'margin-left:auto', 'aria-label': `Edit ${e.name} sets, reps and settings`,
+      onclick: () => card.replaceChildren(...editPanel(session, ei)),
+    }, '✎ Edit') : null,
+    live ? h('button', {
+      class: 'btn small', 'aria-label': `Swap ${e.name} for another exercise`,
       onclick: () => card.replaceChildren(...swapPanel(session, ei)),
     }, '⇄ Swap') : null));
 
@@ -620,6 +624,72 @@ const loadOf = (ex) => (ex?.band ? 'band' : ex?.bodyweight ? 'bodyweight' : ex?.
 const loadFlags = (load) => ({ bodyweight: load === 'bodyweight', band: load === 'band', perHand: load === 'dumbbell' });
 const loadSelect = (value) => h('select', { class: 'field' },
   LOAD_TYPES.map(([v, label]) => h('option', { value: v, selected: v === value }, label)));
+
+// Inline form that replaces an exercise card to change its parameters mid-workout.
+// Same id, so history and progression continue.
+function editPanel(session, ei) {
+  const e = session.entries[ei];
+  const base = e.target || exerciseDef(e.exerciseId);
+  const inProgram = allProgramExercises(state.program).some((x) => x.id === e.exerciseId);
+
+  const text = (v, attrs = {}) => h('input', { class: 'field', autocomplete: 'off', value: v ?? '', ...attrs });
+  const num = (v, mode = 'numeric') => text(String(v ?? ''), { type: 'text', inputmode: mode });
+  const f = {
+    name: text(base.name || e.name), cue: text(base.cue),
+    sets: num(e.sets.length), restSec: num(base.restSec ?? 60),
+    repMin: num(base.repMin ?? 10), repMax: num(base.repMax ?? 12),
+    increment: num(base.increment || (session.unit === 'kg' ? 2.5 : 5), 'decimal'),
+  };
+  const perSide = h('input', { type: 'checkbox', checked: !!base.perSide });
+  const load = loadSelect(loadOf(base));
+  const permanent = h('input', { type: 'checkbox' });
+
+  async function apply() {
+    const nm = f.name.value.trim();
+    if (!nm) { alert('Name is required.'); return; }
+    const n = (inp, d) => { const v = parseNum(inp.value); return v == null ? d : v; };
+    const setCount = Math.max(1, Math.round(n(f.sets, e.sets.length)));
+    const ex = {
+      ...base, id: e.exerciseId, name: nm, cue: f.cue.value.trim(),
+      sets: session.deload ? setCount + 1 : setCount, restSec: Math.max(0, Math.round(n(f.restSec, 60))),
+      repMin: Math.max(1, Math.round(n(f.repMin, 10))), repMax: Math.max(1, Math.round(n(f.repMax, 12))),
+      perSide: perSide.checked, ...loadFlags(load.value),
+    };
+    ex.increment = repsOnly(ex) ? 0 : Math.max(0, n(f.increment, 5));
+    if (ex.repMax < ex.repMin) [ex.repMin, ex.repMax] = [ex.repMax, ex.repMin];
+    if (repsOnly(ex) && !repsOnly(base) && e.sets.some((s) => s.weight != null)
+      && !confirm('Reps-only load clears the weights logged for this exercise today. Continue?')) return;
+
+    const r = editEntry(e, ex, setCount);
+    session.entries = session.entries.map((x, i) => (i === ei ? r.entry : x));
+    autosave(session);
+    await flushSave(session.id);
+    if (permanent.checked) await saveProgram(updateEverywhere(state.program, e.exerciseId, ex));
+    toast(r.kept ? `Saved · kept ${r.kept} logged set${r.kept > 1 ? 's' : ''}` : permanent.checked ? 'Saved to workout and program' : 'Saved for this workout');
+    route();
+  }
+
+  const shared = SLOTS.filter(([l, d]) => programList(state.program, d, l).some((x) => x.id === e.exerciseId))
+    .map(([l, d]) => slotName(d, l));
+  return [
+    h('h2', null, `Edit ${e.name}`),
+    h('p', { class: 'muted small' }, 'Just for this workout unless you tick the box below. History continues under the same exercise.'),
+    h('div', { class: 'form', style: 'margin-top:10px' },
+      h('label', null, 'Name', f.name),
+      h('label', null, 'Cue (optional)', f.cue),
+      h('label', null, 'Load', load),
+      h('div', { class: 'grid2' },
+        h('label', null, session.deload ? 'Sets today (deload)' : 'Sets', f.sets),
+        h('label', null, 'Rest (sec)', f.restSec)),
+      h('div', { class: 'grid2' }, h('label', null, 'Reps min', f.repMin), h('label', null, 'Reps max', f.repMax)),
+      h('label', null, `Increment (${session.unit})`, f.increment),
+      h('label', { class: 'check' }, perSide, 'Reps per side'),
+      inProgram ? h('label', { class: 'check' }, permanent, `Also save to the program (${shared.join(', ')})`) : null,
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', onclick: apply }, 'Save'),
+        h('button', { class: 'btn', onclick: () => route() }, 'Cancel'))),
+  ];
+}
 
 // Inline form that replaces an exercise card to swap it mid-workout.
 function swapPanel(session, ei) {

@@ -287,3 +287,41 @@ test('swapEntry: swapped-in exercise is prefilled from its own history, deload r
   assert.deepEqual(r.entries[0].sets.map((x) => x.weight), [110, 110]);
   assert.equal(makeEntry(legPress, hist).sets.length, 3);
 });
+
+// ---------- mid-session edit ----------
+import { editEntry } from '../app/js/logic.js';
+
+test('editEntry: updates target and name, adds sets with last weight', () => {
+  const s = newSession('A', SEED_PROGRAM, [], { now: T0 });
+  const e = s.entries.find((x) => x.exerciseId === 'chest_press');
+  e.sets.forEach((x) => { x.weight = 50; });
+  const ex = { ...e.target, name: 'Chest press (narrow)', repMin: 8, repMax: 10, restSec: 120 };
+  const r = editEntry(e, ex, 5);
+  assert.equal(r.entry.exerciseId, 'chest_press');
+  assert.equal(r.entry.name, 'Chest press (narrow)');
+  assert.equal(r.entry.target.repMax, 10);
+  assert.equal(r.entry.target.restSec, 120);
+  assert.deepEqual(r.entry.sets.map((x) => x.weight), [50, 50, 50, 50, 50]);
+  assert.equal(r.kept, 0);
+  assert.equal(e.sets.length, 3, 'original entry untouched');
+});
+
+test('editEntry: removes only empty trailing sets, keeps logged ones', () => {
+  const s = newSession('A', SEED_PROGRAM, [], { now: T0 });
+  const e = s.entries.find((x) => x.exerciseId === 'chest_press');
+  e.sets[0].reps = 10; e.sets[0].done = true;
+  e.sets[2].reps = 9;
+  const r = editEntry(e, e.target, 1);
+  assert.equal(r.entry.sets.length, 2);
+  assert.deepEqual(r.entry.sets.map((x) => x.reps), [10, 9]);
+  assert.equal(r.kept, 1);
+});
+
+test('editEntry: reps-only load clears weights', () => {
+  const s = newSession('A', SEED_PROGRAM, [], { now: T0 });
+  const e = s.entries.find((x) => x.exerciseId === 'chest_press');
+  e.sets.forEach((x) => { x.weight = 50; });
+  const r = editEntry(e, { ...e.target, bodyweight: true, increment: 0 }, 4);
+  assert.ok(r.entry.sets.every((x) => x.weight === null));
+  assert.equal(r.entry.sets.length, 4);
+});

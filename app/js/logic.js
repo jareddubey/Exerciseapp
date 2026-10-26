@@ -232,6 +232,29 @@ export function swapEntry(session, index, ex, sessions) {
 }
 
 /**
+ * Change an entry's parameters mid-session (same id, so history continues).
+ * `ex` becomes the entry's target; `setCount` is how many sets this workout has.
+ * New sets copy the last set's weight. Only empty sets are removed, from the
+ * end; sets with reps or a tick are never dropped. Switching to a reps-only
+ * load clears weights. Returns { entry, kept } where kept counts sets that
+ * stayed because they have data.
+ */
+export function editEntry(entry, ex, setCount) {
+  const noWeight = repsOnly(ex);
+  const sets = entry.sets.map((s) => ({ ...s, weight: noWeight ? null : s.weight }));
+  while (sets.length < setCount) {
+    sets.push({ weight: noWeight ? null : sets[sets.length - 1]?.weight ?? null, reps: null, done: false });
+  }
+  let kept = 0;
+  for (let i = sets.length - 1; i >= 0 && sets.length > setCount; i--) {
+    const s = sets[i];
+    if (Number(s.reps) > 0 || s.done) kept++;
+    else sets.splice(i, 1);
+  }
+  return { entry: { ...entry, name: ex.name, target: { ...ex }, sets }, kept: Math.min(kept, sets.length - setCount) };
+}
+
+/**
  * Deload tracking. Anchor = last deload (or first session ever). A deload week
  * that was started and has run its 7 days counts as done automatically.
  */
