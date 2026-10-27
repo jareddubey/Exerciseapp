@@ -55,6 +55,12 @@ const FLY = { id: 'supine_db_fly', name: 'Supine DB fly (PT)', increment: 1, per
 const ADDUCTOR_RB = { id: 'adductor_rock_back', name: 'Adductor rock-back', increment: 0, bodyweight: true, perSide: true, cue: 'Hands and knees, one leg out to the side · rock back with the spine still · stop before the back rounds' };
 const HIP_FLEXOR = { id: 'hip_flexor_stretch', name: 'Half-kneeling hip flexor stretch', increment: 0, bodyweight: true, perSide: true, measure: 'time', cue: 'Squeeze the back-leg glute · ribs down · extra set on the left' };
 
+// Daily right posterior capsule stretch, alternating: sleeper Mon/Wed/Fri,
+// cross-body on Armor (Tue/Thu). Gentle: the remplissage tethers the back of
+// the cuff, and the shoulder dislikes anterior pinch.
+const SLEEPER = { id: 'sleeper_stretch', name: 'Sleeper stretch (right)', increment: 0, bodyweight: true, measure: 'time', cue: 'Lie on the right side, rolled back 20–30°, elbow a bit below shoulder height · left hand eases the forearm toward the floor · stretch at the back of the shoulder, never a front pinch' };
+const CROSS_BODY = { id: 'cross_body_stretch', name: 'Cross-body stretch (right)', increment: 0, bodyweight: true, measure: 'time', cue: 'On your back, or shoulder blade against a wall so it can’t slide · pull the right arm across at or below shoulder height · stretch at the back of the shoulder, never a front pinch' };
+
 // Daily shoulder control: an easy primer on lifting days (between the first
 // lower-body exercise's sets, or before Wednesday's), the full dose on Armor.
 const primer = () => ({ ...CUFF, sets: 2, repMin: 8, repMax: 10, restSec: 30 });
@@ -66,6 +72,7 @@ const armor = (rowEr) => [
   p(CUFF, 3, 8, 15, 30, 'C'), p(CARRY, 3, 30, 40, 60, 'C'),
   p(FLY, 2, 12, 15, 30, 'D'), p(ADDUCTOR_RB, 2, 8, 8, 30, 'D'),
   p(rowEr, 2, 12, 15, 30, 'E'), p(HIP_FLEXOR, 2, 30, 30, 30, 'E'),
+  p(CROSS_BODY, 3, 30, 30, 15, 'F'),
 ];
 
 // ---------- home: dumbbells, bands, a pull-up bar and an incline bench ----------
@@ -91,6 +98,7 @@ export const HOME_PROGRAM = {
     p(BAND_LEG_CURL, 3, 12, 20, 30, 'C'), p(LATERAL, 3, 12, 20, 60, 'C'),
     p(STANDING_CURL, 2, 10, 15, 30, 'D'), p(BAND_PUSHDOWN, 3, 12, 20, 60, 'D'),
     p(HAMMER, 2, 10, 12, 30, 'E'), p(BAND_PALLOF, 3, 10, 10, 60, 'E'),
+    p(SLEEPER, 3, 30, 30, 15, 'F'),
   ],
   wed: [
     primer(),
@@ -98,7 +106,7 @@ export const HOME_PROGRAM = {
     p(LUNGE, 3, 8, 12, 45, 'B'), p(PUSH_UP, 3, 8, 15, 90, 'B'),
     p(BRIDGE, 3, 12, 20, 30, 'C'), p(BAND_PULL_APART, 2, 12, 15, 60, 'C'),
     p(HAMMER, 2, 10, 12, 30, 'D'), p(BAND_PUSHDOWN, 2, 12, 20, 60, 'D'),
-    p(STANDING_CURL, 2, 10, 15, 60, 'E'),
+    p(STANDING_CURL, 2, 10, 15, 30, 'E'), p(SLEEPER, 3, 30, 30, 15, 'E'),
   ],
   fri: [
     p(GOBLET, 2, 12, 15, 60, 'A'), pairedPrimer(),
@@ -106,7 +114,7 @@ export const HOME_PROGRAM = {
     p(BAND_LEG_EXT, 3, 15, 25, 30, 'C'), p(BAND_LEG_CURL, 2, 12, 20, 60, 'C'),
     p(LATERAL, 3, 12, 20, 30, 'D'), p(BAND_PUSHDOWN, 3, 12, 20, 60, 'D'),
     p(CONC_CURL, 2, 10, 15, 30, 'E'), p(BODY_SAW, 3, 20, 30, 60, 'E'),
-    p(HAMMER, 2, 10, 12, 60, 'F'),
+    p(HAMMER, 2, 10, 12, 30, 'F'), p(SLEEPER, 3, 30, 30, 15, 'F'),
   ],
   armor: armor(BAND_ROW_ER),
 };
@@ -118,6 +126,7 @@ export const SEED_PROGRAM = {
     p(LEG_CURL, 3, 10, 15, 30, 'C'), p(LATERAL, 3, 12, 20, 60, 'C'),
     p(STANDING_CURL, 2, 10, 15, 30, 'D'), p(PUSHDOWN, 3, 10, 15, 60, 'D'),
     p(HAMMER, 2, 10, 12, 30, 'E'), p(PALLOF, 3, 10, 10, 60, 'E'),
+    p(SLEEPER, 3, 30, 30, 15, 'F'),
   ],
   wed: [
     primer(),
@@ -125,7 +134,7 @@ export const SEED_PROGRAM = {
     p(LEG_PRESS, 3, 10, 15, 45, 'B'), p(PUSH_UP, 3, 8, 15, 90, 'B'),
     p(BRIDGE, 3, 12, 20, 30, 'C'), p(REVERSE_PEC, 2, 12, 15, 60, 'C'),
     p(HAMMER, 2, 10, 12, 30, 'D'), p(SA_PUSHDOWN, 2, 12, 15, 60, 'D'),
-    p(STANDING_CURL, 2, 10, 15, 60, 'E'),
+    p(STANDING_CURL, 2, 10, 15, 30, 'E'), p(SLEEPER, 3, 30, 30, 15, 'E'),
   ],
   fri: [
     p(HACK, 2, 12, 15, 60, 'A'), pairedPrimer(),
@@ -133,7 +142,7 @@ export const SEED_PROGRAM = {
     p(LEG_EXT, 3, 12, 15, 30, 'C'), p(LEG_CURL, 2, 12, 15, 60, 'C'),
     p(LATERAL, 3, 12, 20, 30, 'D'), p(PUSHDOWN, 3, 12, 15, 60, 'D'),
     p(PREACHER, 2, 10, 15, 30, 'E'), p(BODY_SAW, 3, 20, 30, 60, 'E'),
-    p(HAMMER, 2, 10, 12, 60, 'F'),
+    p(HAMMER, 2, 10, 12, 30, 'F'), p(SLEEPER, 3, 30, 30, 15, 'F'),
   ],
   armor: armor(ROW_ER),
   home: HOME_PROGRAM,

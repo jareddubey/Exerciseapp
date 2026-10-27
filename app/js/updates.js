@@ -222,6 +222,37 @@ export function cuffDoseUpdate(program) {
   };
 }
 
+const STRETCH_IDS = ['sleeper_stretch', 'cross_body_stretch'];
+
+/**
+ * Daily posterior capsule stretch (Oct 2026), right shoulder, alternating:
+ * sleeper on lifting days, cross-body on Armor. It goes last, paired with a
+ * lone finisher (the curl on Wed/Fri) or as its own last pair. Days that
+ * already have either stretch are left alone.
+ */
+export function capsuleStretchUpdate(program) {
+  let p = program;
+  let changed = false;
+  for (const [loc, day] of SLOTS) {
+    if (loc === 'home' && !p.home) continue;
+    const list = programList(p, day, loc);
+    if (list.some((x) => STRETCH_IDS.includes(x.id))) continue;
+    const seedEx = programList(SEED_PROGRAM, day, loc).find((x) => STRETCH_IDS.includes(x.id));
+    const ex = { ...seedEx };
+    const last = list.at(-1)?.group;
+    if (!last) delete ex.group;
+    else if (list.filter((x) => x.group === last).length === 1) ex.group = last;
+    else ex.group = String.fromCharCode(last.charCodeAt(0) + 1);
+    p = withProgramList(p, day, loc, [...list, ex]);
+    changed = true;
+  }
+  if (!changed) return { program, changes: [] };
+  return {
+    program: p,
+    changes: ['Daily posterior capsule stretch, last in the session: sleeper stretch Mon/Wed/Fri, cross-body stretch on Armor (Tue/Thu), 3 × 30 s'],
+  };
+}
+
 export const PROGRAM_UPDATES = [
   { id: 'full-body-3day-2026-10', title: '3-day full body + Armor', apply: fullBodyUpdate, undo: false },
   { id: 'cuff-straight-arm-2026-10', title: 'Shoulder superset cue', apply: cuffCueUpdate },
@@ -229,4 +260,5 @@ export const PROGRAM_UPDATES = [
   { id: 'pairing-curls-2026-10', title: 'Pairs by room, landmine press, curls 3×/week', apply: pairingUpdate },
   { id: 'supported-dead-bug-2026-10', title: 'Supported dead bug on Armor', apply: supportedDeadBugUpdate },
   { id: 'cuff-dose-2026-10', title: 'Right-shoulder superset dose', apply: cuffDoseUpdate },
+  { id: 'capsule-stretch-2026-10', title: 'Daily posterior capsule stretch', apply: capsuleStretchUpdate },
 ];

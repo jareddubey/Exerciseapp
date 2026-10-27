@@ -5,7 +5,7 @@ import {
   suggestWeight, prefillWeights, lastFor, formatSets, formatTarget, convertProgramUnits, noIncrement, pairLabels, nextUp,
   isDayProgram, slotName, dayLabel, dayTitle, DAY,
 } from '../app/js/logic.js';
-import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
+import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, capsuleStretchUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
 import { SEED_PROGRAM, HOME_PROGRAM, DAY_NOTES } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday
@@ -345,6 +345,23 @@ test('supported dead bug update: takes the dead bug\'s place on Armor, gym and h
   assert.deepEqual(supportedDeadBugUpdate(program).changes, [], 'idempotent');
   assert.deepEqual(supportedDeadBugUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
   assert.match(DAY_NOTES.armor[0], /90-90 breathing/);
+});
+
+test('capsule stretch update: sleeper on lifting days, cross-body on Armor, last in the session', () => {
+  const stretches = ['sleeper_stretch', 'cross_body_stretch'];
+  let old = { ...structuredClone(SEED_PROGRAM), unit: 'lb' };
+  for (const [loc, day] of SLOTS) old = withProgramList(old, day, loc, programList(old, day, loc).filter((x) => !stretches.includes(x.id)));
+  const { program, changes } = capsuleStretchUpdate(old);
+  assert.equal(changes.length, 1);
+  for (const [loc, day] of SLOTS) {
+    const got = programList(program, day, loc);
+    const want = programList(SEED_PROGRAM, day, loc);
+    assert.deepEqual(got.map((x) => [x.id, x.group]), want.map((x) => [x.id, x.group]), `${loc} ${day}`);
+    assert.equal(got.at(-1).id, day === 'armor' ? 'cross_body_stretch' : 'sleeper_stretch');
+  }
+  assert.deepEqual(capsuleStretchUpdate(program).changes, [], 'idempotent');
+  assert.deepEqual(capsuleStretchUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
+  assert.equal(formatTarget(find('mon', 'sleeper_stretch')), '3 × 30 s');
 });
 
 test('updates in order take a first-shipped 3-day program to the current seed', () => {
