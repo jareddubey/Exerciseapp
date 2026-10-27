@@ -5,7 +5,7 @@ import {
   suggestWeight, prefillWeights, lastFor, formatSets, formatTarget, convertProgramUnits, noIncrement, pairLabels, nextUp,
   isDayProgram, slotName, dayLabel, dayTitle, DAY,
 } from '../app/js/logic.js';
-import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, capsuleStretchUpdate, recoveryArmorUpdate, copenhagenCarryUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
+import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, capsuleStretchUpdate, recoveryArmorUpdate, copenhagenCarryUpdate, pairOrderUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
 import { SEED_PROGRAM, HOME_PROGRAM, DAY_NOTES } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday
@@ -42,6 +42,10 @@ test('seed: every day is well formed, in pairs (a lone finisher at most)', () =>
     const counts = Object.values(sizes);
     assert.ok(counts.every((k) => k === 2 || k === 1) && counts.filter((k) => k === 1).length <= 1, `${loc} ${day}: pairs`);
     if (counts.includes(1)) assert.equal(sizes[grouped.at(-1).group], 1, `${loc} ${day}: the lone one is last`);
+    grouped.forEach((x, i) => {
+      const nx = grouped[i + 1];
+      if (nx && x.group === nx.group) assert.ok(x.sets >= nx.sets, `${loc} ${day} ${x.group}: the 3-set exercise goes first`);
+    });
     assert.ok(!pairLabels(grouped).includes(null));
   }
   const noRowEr = (list) => list.filter((x) => !x.id.endsWith('row_er'));
@@ -356,10 +360,11 @@ test('capsule stretch update: sleeper on lifting days, cross-body on Armor, last
   assert.equal(program.fri.at(-2).restSec, 30, 'the lone curl\'s rest becomes a pair rest');
   assert.equal(changes.length, 1);
   for (const [loc, day] of SLOTS) {
-    const got = programList(program, day, loc);
+    const got = programList(pairOrderUpdate(program).program, day, loc);
     const want = programList(SEED_PROGRAM, day, loc);
     assert.deepEqual(got.map((x) => [x.id, x.group]), want.map((x) => [x.id, x.group]), `${loc} ${day}`);
-    assert.equal(got.at(-1).id, day === 'armor' ? 'cross_body_stretch' : 'sleeper_stretch');
+    const stretch = got.find((x) => x.id === (day === 'armor' ? 'cross_body_stretch' : 'sleeper_stretch'));
+    assert.equal(stretch.group, got.at(-1).group, `${loc} ${day}: stretch in the last slot`);
   }
   assert.deepEqual(capsuleStretchUpdate(program).changes, [], 'idempotent');
   assert.deepEqual(capsuleStretchUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
@@ -423,6 +428,30 @@ test('Copenhagen + carry update: Copenhagen right ×2 left ×1 on Armor, carries
   const fixed = copenhagenCarryUpdate(perSide).program.armor.find((x) => x.id === 'copenhagen_plank');
   assert.deepEqual(fixed, find('armor', 'copenhagen_plank'));
   assert.equal(find('wed', 'suitcase_carry', 'home').measure, 'distance');
+});
+
+test('pair order update: 3-set exercise first, seed rests where the seed has the pair; glute bridge 2 sets', () => {
+  // undo the order on every pair the seed flipped, with the rests they had
+  let old = { ...structuredClone(SEED_PROGRAM), unit: 'lb' };
+  const flipped = { tri_pushdown: 'standing_bicep_curl', pallof: 'hammer_curl', body_saw: 'preacher_machine', band_pushdown: 'standing_bicep_curl', band_pallof: 'hammer_curl', sleeper_stretch: 'hammer_curl' };
+  for (const [loc, day] of SLOTS) {
+    const list = programList(old, day, loc).map((x) => (x.id === 'glut_bridge' ? { ...x, sets: 3 } : x));
+    for (let i = 0; i < list.length - 1; i++) {
+      if (flipped[list[i].id] && list[i + 1].group === list[i].group && list[i + 1].sets < list[i].sets) {
+        [list[i], list[i + 1]] = [{ ...list[i + 1], restSec: 30 }, { ...list[i], restSec: 60 }];
+      }
+    }
+    old = withProgramList(old, day, loc, list);
+  }
+  const { program, changes } = pairOrderUpdate(old);
+  assert.ok(changes.includes('Wed: glute bridge 2 sets') && changes.includes('Home Wed: glute bridge 2 sets'));
+  assert.ok(changes.includes('Mon: Cable Pallof press (3 sets) before Hammer curl (2)'));
+  for (const [loc, day] of SLOTS) assert.deepEqual(programList(program, day, loc), programList(SEED_PROGRAM, day, loc), `${loc} ${day}`);
+  assert.deepEqual(pairOrderUpdate(program).changes, [], 'idempotent');
+  assert.deepEqual(pairOrderUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
+  // a pair the user made: switch rest stays first, round rest second
+  const mine = withProgramList(SEED_PROGRAM, 'mon', 'gym', [{ id: 'x', name: 'X', sets: 2, restSec: 20, group: 'A' }, { id: 'y', name: 'Y', sets: 3, restSec: 90, group: 'A' }]);
+  assert.deepEqual(pairOrderUpdate(mine).program.mon.map((x) => [x.id, x.restSec]), [['y', 20], ['x', 90]]);
 });
 
 test('updates in order take a first-shipped 3-day program to the current seed', () => {

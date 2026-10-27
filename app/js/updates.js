@@ -5,7 +5,7 @@
 //
 // The earlier A/B updates (arms-shoulders-2026-10, home-workouts-2026-10) were
 // superseded by the 3-day redesign, which replaces the whole program.
-import { convertProgramUnits, convertIncrement, isDayProgram, allProgramExercises, updateEverywhere, programList, withProgramList, SLOT_KEYS, SLOTS } from './logic.js';
+import { convertProgramUnits, convertIncrement, isDayProgram, allProgramExercises, updateEverywhere, programList, withProgramList, SLOT_KEYS, SLOTS, dayLabel } from './logic.js';
 import { SEED_PROGRAM } from './seed.js';
 
 /** 3-day full body + Armor (Oct 2026): replaces an A/B program, gym and home. */
@@ -349,6 +349,44 @@ export function copenhagenCarryUpdate(program) {
   return { program: p, changes };
 }
 
+/**
+ * Pair order (Oct 2026): in a pair with 3 sets and 2, the 3-set exercise goes
+ * first, so the last round is the extra set rather than a gap in the middle.
+ * The short switch rest stays with the first exercise and the end-of-round rest
+ * with the second (the seed's rests where it has the same pair). Wednesday's
+ * glute bridge drops to 2 sets beside the carry.
+ */
+export function pairOrderUpdate(program) {
+  let p = program;
+  const changes = [];
+  for (const [loc, day] of SLOTS) {
+    if (loc === 'home' && !p.home) continue;
+    const before = changes.length;
+    let list = programList(p, day, loc);
+    const label = `${loc === 'home' ? 'Home ' : ''}${dayLabel(day)}`;
+    const bridge = list.find((x) => x.id === 'glut_bridge');
+    if (day === 'wed' && bridge?.sets === 3 && list.some((x) => x.id === 'suitcase_carry' && x.group === bridge.group)) {
+      list = list.map((x) => (x === bridge ? { ...x, sets: 2 } : x));
+      changes.push(`${label}: glute bridge 2 sets`);
+    }
+    const seed = programList(SEED_PROGRAM, day, loc);
+    const next = [...list];
+    for (let i = 0; i < next.length - 1; i++) {
+      const [a, b] = [next[i], next[i + 1]];
+      if (!a.group || a.group !== b.group || a.sets >= b.sets) continue;
+      const sa = seed.find((x) => x.id === a.id && x.group === a.group);
+      const sb = seed.find((x) => x.id === b.id && x.group === b.group);
+      const fromSeed = sa && sb && seed.indexOf(sb) < seed.indexOf(sa);
+      next[i] = { ...b, restSec: fromSeed ? sb.restSec : a.restSec };
+      next[i + 1] = { ...a, restSec: fromSeed ? sa.restSec : b.restSec };
+      changes.push(`${label}: ${b.name} (${b.sets} sets) before ${a.name} (${a.sets})`);
+      i++;
+    }
+    if (changes.length > before) p = withProgramList(p, day, loc, next);
+  }
+  return { program: p, changes };
+}
+
 export const PROGRAM_UPDATES = [
   { id: 'full-body-3day-2026-10', title: '3-day full body + Armor', apply: fullBodyUpdate, undo: false },
   { id: 'cuff-straight-arm-2026-10', title: 'Shoulder superset cue', apply: cuffCueUpdate },
@@ -359,4 +397,5 @@ export const PROGRAM_UPDATES = [
   { id: 'capsule-stretch-2026-10', title: 'Daily posterior capsule stretch', apply: capsuleStretchUpdate },
   { id: 'recovery-armor-2026-10', title: 'Armor for recovery', apply: recoveryArmorUpdate },
   { id: 'copenhagen-carry-2026-10', title: 'Copenhagens back, carries on Wednesday', apply: copenhagenCarryUpdate },
+  { id: 'pair-order-2026-10', title: 'Three-set exercise first in a pair', apply: pairOrderUpdate },
 ];
