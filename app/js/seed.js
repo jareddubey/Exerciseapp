@@ -149,10 +149,13 @@ export const SEED_PROGRAM = {
 };
 
 // Shown at the top of a session and in the program editor.
-const WARMUP = 'Warm-up, about 7 min: 3 min bike or brisk walk · quadruped rock-back ×8 · 90/90 hip switches ×6/side · bird dog ×5/side.';
+// PT's side-lying drill: deep core on, then the left hip turns out and lifts
+// while it stays on. Primes the left side before squats, hinges and core work.
+const SIDE_LYING_CORE = 'left side-lying core (on your right side): 3–5 pelvic floor breaths → multifidus + TA co-contraction → left hip ER and abduction ×8–10 slow, keeping it on, about 20–30% effort';
+const WARMUP = `Warm-up, about 9 min: 3 min bike or brisk walk · ${SIDE_LYING_CORE} · quadruped rock-back ×8 · 90/90 hip switches ×6/side · bird dog ×5/side.`;
 const PRIMER_PAIRED = 'The right-shoulder primer is A2: easy sets between the squats, before you press and pull. 1 lb, stop well short of fatigue: practice, not training.';
 const PRIMER_FIRST = 'Then the right-shoulder primer: easy sets, before you press and pull. 1 lb, stop well short of fatigue: practice, not training.';
-const ARMOR_OPENER = 'Opener, about 3 min: 90-90 breathing, feet on the wall, heels pressing lightly (5 long exhales with a 2–3 s pause, twice) · adductor rock-back ×8/side. A hand on the left inner thigh should feel it stay quiet.';
+const ARMOR_OPENER = `Opener, about 5 min: 90-90 breathing, feet on the wall, heels pressing lightly (5 long exhales with a 2–3 s pause, twice) · ${SIDE_LYING_CORE} · adductor rock-back ×8/side. A hand on the left inner thigh should feel it stay quiet.`;
 const CUFF_GOALS = 'Right-shoulder superset is the hard dose today. Goal: 3 × 15 at 1 lb with 3-s holds and no front-of-shoulder ache → then 1.5 lb (wrist weight), not 2. A dull ache up to 2/10 that’s gone within an hour is OK; a pinch, or a shoulder that’s worse the next day → shorter range. More load later: bend the elbow and use 2 lb.';
 const PAIRS = 'Pairs (A1, A2): alternate their sets. The rest timer shows what’s next.';
 export const DAY_NOTES = {

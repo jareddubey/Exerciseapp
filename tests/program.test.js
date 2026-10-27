@@ -345,6 +345,7 @@ test('supported dead bug update: takes the dead bug\'s place on Armor, gym and h
   assert.deepEqual(supportedDeadBugUpdate(program).changes, [], 'idempotent');
   assert.deepEqual(supportedDeadBugUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
   assert.match(DAY_NOTES.armor[0], /90-90 breathing/);
+  for (const day of DAYS) assert.match(DAY_NOTES[day][0], /side-lying core/, `${day} side-lying core`);
 });
 
 test('capsule stretch update: sleeper on lifting days, cross-body on Armor, last in the session', () => {
