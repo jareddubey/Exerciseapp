@@ -4,7 +4,9 @@
 //
 // Built around a sensitive lower back (no axial loading, stop before the
 // pelvis tucks), a stiff left hip, and a right shoulder that dislikes
-// end-range overhead and straight-arm horizontal abduction.
+// end-range overhead and straight-arm horizontal abduction (remplissage ~10 yr
+// ago; right biceps tenodesis June 2026, so the curls are PT rehab and right-arm
+// pulling stays within the PT's limits).
 //
 // Each exercise below is its identity (name, cue, load), shared everywhere it
 // appears so its history is shared. `p()` adds the per-day prescription:
@@ -35,6 +37,10 @@ const CHEST_PRESS = { id: 'chest_press', name: 'Chest press machine', increment:
 const LANDMINE = { id: 'landmine_press', name: 'Half-kneeling landmine press', increment: 2.5, perSide: true, cue: 'Log plates only · knee down on the pressing side · neutral grip on the bar end · press up and forward, stop short of any front-of-shoulder pinch' };
 const LEG_EXT = { id: 'leg_ext', name: 'Leg extension', increment: 5, cue: 'If it stalls, check seat depth and pad position' };
 const PREACHER = { id: 'preacher_machine', name: 'Preacher curl machine', increment: 5, cue: 'Control the lowering · don’t bounce out of the bottom' };
+// Calves twice a week: straight knee Monday, bent knee Friday, nothing across
+// the shoulders.
+const LP_CALF = { id: 'leg_press_calf_raise', name: 'Leg press calf raise', increment: 10, cue: 'Knees straight, not locked · balls of the feet on the platform’s bottom edge · slow stretch, pause at the top · safety stops on' };
+const SEATED_CALF = { id: 'seated_calf_raise', name: 'Seated calf raise', increment: 5, cue: 'Full stretch at the bottom, pause at the top · no bouncing' };
 // Wednesday's core: the one lifting day without it (Mon Pallof, Fri body saw).
 const CARRY = { id: 'suitcase_carry', name: 'Suitcase carry', increment: 5, perHand: true, perSide: true, measure: 'distance', cue: 'One DB at your side · stand tall, don’t lean · slow steps' };
 const BODY_SAW = { id: 'body_saw', name: 'Body saw', increment: 0, bodyweight: true, measure: 'time', cue: 'Forearm plank, feet on sliders or a towel · rock 2–3 in back and forth · plain plank if the shoulder complains' };
@@ -91,6 +97,8 @@ const BAND_PULL_APART = { id: 'band_pull_apart', name: 'Band pull-apart', increm
 const BAND_ROW_ER = { id: 'band_row_er', name: 'Band row to ER at 90/90', increment: 0, band: true, perSide: true, cue: 'Band at chest height · elbow ~30° forward of straight out · stop before any pinch' };
 const DB_BENCH = { id: 'db_bench_press', name: 'DB bench press', increment: 5, perHand: true, cue: 'Neutral grip · stop at chest · feet down, no big arch' };
 const BAND_LEG_EXT = { id: 'band_leg_extension', name: 'Seated band leg extension', increment: 0, band: true, perSide: true, cue: 'Band anchored behind the bench leg · squeeze at the top' };
+const SL_CALF = { id: 'single_leg_calf_raise', name: 'Single-leg calf raise', increment: 5, perSide: true, cue: 'On a step, hand on the wall · DB in the other hand · slow stretch, pause at the top' };
+const SEATED_DB_CALF = { id: 'seated_db_calf_raise', name: 'Seated DB calf raise', increment: 5, perHand: true, cue: 'On the bench, balls of the feet on a plate or step, DBs on the knees · full stretch, pause at the top' };
 const CONC_CURL = { id: 'concentration_curl', name: 'Concentration curl', increment: 5, perHand: true, perSide: true, cue: 'Seated, upper arm braced on the inner thigh · arm in front, like a preacher curl' };
 
 export const HOME_PROGRAM = {
@@ -98,9 +106,9 @@ export const HOME_PROGRAM = {
     p(GOBLET, 3, 10, 15, 60, 'A'), pairedPrimer(),
     p(DB_BENCH, 3, 10, 12, 45, 'B'), p(DB_ROW, 3, 10, 12, 90, 'B'),
     p(BAND_LEG_CURL, 3, 12, 20, 30, 'C'), p(LATERAL, 3, 12, 20, 60, 'C'),
-    p(BAND_PUSHDOWN, 3, 12, 20, 30, 'D'), p(STANDING_CURL, 2, 10, 15, 60, 'D'),
+    p(BAND_PUSHDOWN, 2, 12, 20, 30, 'D'), p(STANDING_CURL, 2, 10, 15, 60, 'D'),
     p(BAND_PALLOF, 3, 10, 10, 30, 'E'), p(HAMMER, 2, 10, 12, 60, 'E'),
-    p(SLEEPER, 3, 30, 30, 15, 'F'),
+    p(SLEEPER, 3, 30, 30, 15, 'F'), p(SL_CALF, 2, 12, 20, 30, 'F'),
   ],
   wed: [
     primer(),
@@ -115,9 +123,10 @@ export const HOME_PROGRAM = {
     p(GOBLET, 2, 12, 15, 60, 'A'), pairedPrimer(),
     p(BAND_LAT, 3, 12, 20, 45, 'B'), p(INCLINE_DB, 3, 10, 12, 90, 'B'),
     p(BAND_LEG_EXT, 3, 15, 25, 30, 'C'), p(BAND_LEG_CURL, 2, 12, 20, 60, 'C'),
-    p(LATERAL, 3, 12, 20, 30, 'D'), p(BAND_PUSHDOWN, 3, 12, 20, 60, 'D'),
+    p(LATERAL, 3, 12, 20, 30, 'D'), p(BAND_PUSHDOWN, 2, 12, 20, 60, 'D'),
     p(BODY_SAW, 3, 20, 30, 30, 'E'), p(CONC_CURL, 2, 10, 15, 60, 'E'),
-    p(SLEEPER, 3, 30, 30, 15, 'F'), p(HAMMER, 2, 10, 12, 30, 'F'),
+    p(SEATED_DB_CALF, 2, 12, 20, 30, 'F'), p(HAMMER, 2, 10, 12, 60, 'F'),
+    p(SLEEPER, 3, 30, 30, 15, 'G'),
   ],
   armor: armor(BAND_ROW_ER),
 };
@@ -127,9 +136,9 @@ export const SEED_PROGRAM = {
     p(HACK, 3, 6, 10, 60, 'A'), pairedPrimer(),
     p(CHEST_PRESS, 3, 8, 12, 45, 'B'), p(CS_ROW, 3, 8, 12, 90, 'B'),
     p(LEG_CURL, 3, 10, 15, 30, 'C'), p(LATERAL, 3, 12, 20, 60, 'C'),
-    p(PUSHDOWN, 3, 10, 15, 30, 'D'), p(STANDING_CURL, 2, 10, 15, 60, 'D'),
+    p(PUSHDOWN, 2, 10, 15, 30, 'D'), p(STANDING_CURL, 2, 10, 15, 60, 'D'),
     p(PALLOF, 3, 10, 10, 30, 'E'), p(HAMMER, 2, 10, 12, 60, 'E'),
-    p(SLEEPER, 3, 30, 30, 15, 'F'),
+    p(SLEEPER, 3, 30, 30, 15, 'F'), p(LP_CALF, 2, 12, 20, 30, 'F'),
   ],
   wed: [
     primer(),
@@ -144,9 +153,10 @@ export const SEED_PROGRAM = {
     p(HACK, 2, 12, 15, 60, 'A'), pairedPrimer(),
     p(SA_PULLDOWN, 3, 10, 12, 45, 'B'), p(LANDMINE, 3, 8, 12, 90, 'B'),
     p(LEG_EXT, 3, 12, 15, 30, 'C'), p(LEG_CURL, 2, 12, 15, 60, 'C'),
-    p(LATERAL, 3, 12, 20, 30, 'D'), p(PUSHDOWN, 3, 12, 15, 60, 'D'),
+    p(LATERAL, 3, 12, 20, 30, 'D'), p(PUSHDOWN, 2, 12, 15, 60, 'D'),
     p(BODY_SAW, 3, 20, 30, 30, 'E'), p(PREACHER, 2, 10, 15, 60, 'E'),
-    p(SLEEPER, 3, 30, 30, 15, 'F'), p(HAMMER, 2, 10, 12, 30, 'F'),
+    p(SEATED_CALF, 2, 12, 20, 30, 'F'), p(HAMMER, 2, 10, 12, 60, 'F'),
+    p(SLEEPER, 3, 30, 30, 15, 'G'),
   ],
   armor: armor(ROW_ER),
   home: HOME_PROGRAM,
@@ -161,11 +171,12 @@ const PRIMER_PAIRED = 'The right-shoulder primer is A2: easy sets between the sq
 const PRIMER_FIRST = 'Then the right-shoulder primer: easy sets, before you press and pull. 1 lb, stop well short of fatigue: practice, not training.';
 const ARMOR_OPENER = `Opener, about 5 min: 90-90 breathing, feet on the wall, heels pressing lightly (5 long exhales with a 2–3 s pause, twice) · ${SIDE_LYING_CORE} · adductor rock-back ×8/side. A hand on the left inner thigh should feel it stay quiet.`;
 const CUFF_GOALS = 'Right-shoulder superset is the hard dose today. Goal: 3 × 15 at 1 lb with 3-s holds and no front-of-shoulder ache → then 1.5 lb (wrist weight), not 2. A dull ache up to 2/10 that’s gone within an hour is OK; a pinch, or a shoulder that’s worse the next day → shorter range. More load later: bend the elbow and use 2 lb.';
+const EFFORT = 'Effort: end lifting sets with 2–3 good reps left; failure isn’t needed. Right arm (biceps tenodesis, June 2026): curls, rows and pulldowns stay within your PT’s limits. Rehab drills keep their own stop rules. Never push through joint pain.';
 const PAIRS = 'Pairs (A1, A2): alternate their sets. The rest timer shows what’s next.';
 export const DAY_NOTES = {
-  mon: [WARMUP, PRIMER_PAIRED, PAIRS],
-  wed: [`${WARMUP} ${PRIMER_FIRST}`, PAIRS],
-  fri: [WARMUP, PRIMER_PAIRED, PAIRS],
+  mon: [WARMUP, PRIMER_PAIRED, EFFORT, PAIRS],
+  wed: [`${WARMUP} ${PRIMER_FIRST}`, EFFORT, PAIRS],
+  fri: [WARMUP, PRIMER_PAIRED, EFFORT, PAIRS],
   armor: [ARMOR_OPENER, CUFF_GOALS, PAIRS, 'Then 30–40 min Zone 2 cardio: a long dog walk counts, at a pace where you can still talk.'],
 };
 

@@ -5,7 +5,7 @@ import {
   suggestWeight, prefillWeights, lastFor, formatSets, formatTarget, convertProgramUnits, noIncrement, pairLabels, nextUp,
   isDayProgram, slotName, dayLabel, dayTitle, DAY,
 } from '../app/js/logic.js';
-import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, capsuleStretchUpdate, recoveryArmorUpdate, copenhagenCarryUpdate, pairOrderUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
+import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, capsuleStretchUpdate, recoveryArmorUpdate, copenhagenCarryUpdate, pairOrderUpdate, calvesUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
 import { SEED_PROGRAM, HOME_PROGRAM, DAY_NOTES } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday
@@ -355,9 +355,9 @@ test('capsule stretch update: sleeper on lifting days, cross-body on Armor, last
   const stretches = ['sleeper_stretch', 'cross_body_stretch'];
   let old = { ...structuredClone(SEED_PROGRAM), unit: 'lb' };
   for (const [loc, day] of SLOTS) old = withProgramList(old, day, loc, programList(old, day, loc).filter((x) => !stretches.includes(x.id)));
-  old = withProgramList(old, 'fri', 'gym', programList(old, 'fri', 'gym').map((x, i, l) => (i === l.length - 1 ? { ...x, restSec: 60 } : x)));
+  old = withProgramList(old, 'mon', 'gym', programList(old, 'mon', 'gym').map((x, i, l) => (i === l.length - 1 ? { ...x, restSec: 60 } : x)));
   const { program, changes } = capsuleStretchUpdate(old);
-  assert.equal(program.fri.at(-2).restSec, 30, 'the lone curl\'s rest becomes a pair rest');
+  assert.equal(program.mon.at(-2).restSec, 30, 'a lone finisher\'s rest becomes a pair rest');
   assert.equal(changes.length, 1);
   for (const [loc, day] of SLOTS) {
     const got = programList(pairOrderUpdate(program).program, day, loc);
@@ -452,6 +452,37 @@ test('pair order update: 3-set exercise first, seed rests where the seed has the
   // a pair the user made: switch rest stays first, round rest second
   const mine = withProgramList(SEED_PROGRAM, 'mon', 'gym', [{ id: 'x', name: 'X', sets: 2, restSec: 20, group: 'A' }, { id: 'y', name: 'Y', sets: 3, restSec: 90, group: 'A' }]);
   assert.deepEqual(pairOrderUpdate(mine).program.mon.map((x) => [x.id, x.restSec]), [['y', 20], ['x', 90]]);
+});
+
+test('calves update: calf raises Mon/Fri, pushdowns 2 sets, on days in their shipped form', () => {
+  const calfless = {
+    gym: {
+      mon: ['hack_squat', 'side_lying_cuff_supersets', 'chest_press', 'cs_row', 'leg_curl', 'db_lateral_raise', 'tri_pushdown', 'standing_bicep_curl', 'pallof', 'hammer_curl', 'sleeper_stretch'],
+      fri: ['hack_squat', 'side_lying_cuff_supersets', 'single_arm_pulldown', 'landmine_press', 'leg_ext', 'leg_curl', 'db_lateral_raise', 'tri_pushdown', 'body_saw', 'preacher_machine', 'sleeper_stretch', 'hammer_curl'],
+    },
+    home: {
+      mon: ['goblet_squat', 'side_lying_cuff_supersets', 'db_bench_press', 'db_chest_supported_row', 'band_leg_curl', 'db_lateral_raise', 'band_pushdown', 'standing_bicep_curl', 'band_pallof', 'hammer_curl', 'sleeper_stretch'],
+      fri: ['goblet_squat', 'side_lying_cuff_supersets', 'band_lat_pulldown', 'incline_db_press', 'band_leg_extension', 'band_leg_curl', 'db_lateral_raise', 'band_pushdown', 'body_saw', 'concentration_curl', 'sleeper_stretch', 'hammer_curl'],
+    },
+  };
+  const all = new Map(allProgramExercises(SEED_PROGRAM).map((x) => [x.id, x]));
+  const mk = (id) => ({ ...all.get(id), cue: 'mine', sets: 3, group: 'Z' });
+  let old = { ...structuredClone(SEED_PROGRAM), unit: 'kg' };
+  for (const loc of ['gym', 'home']) for (const day of ['mon', 'fri']) old = withProgramList(old, day, loc, calfless[loc][day].map(mk));
+  const { program, changes } = calvesUpdate(old);
+  assert.equal(changes.length, 4);
+  for (const loc of ['gym', 'home']) {
+    for (const day of ['mon', 'fri']) {
+      const got = programList(program, day, loc);
+      const want = programList(SEED_PROGRAM, day, loc);
+      assert.deepEqual(got.map((x) => [x.id, x.sets, x.restSec, x.group]), want.map((x) => [x.id, x.sets, x.restSec, x.group]), `${loc} ${day}`);
+    }
+  }
+  assert.equal(program.fri.find((x) => x.id === 'seated_calf_raise').increment, 2.5, 'kg increment');
+  assert.equal(program.mon.find((x) => x.id === 'tri_pushdown').cue, 'mine', 'keeps the user\'s exercise');
+  assert.deepEqual(calvesUpdate(program).changes, [], 'idempotent');
+  assert.deepEqual(calvesUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
+  for (const day of ['mon', 'fri']) assert.ok(DAY_NOTES[day].some((t) => /2–3 good reps left/.test(t) && /tenodesis/.test(t)), day);
 });
 
 test('updates in order take a first-shipped 3-day program to the current seed', () => {

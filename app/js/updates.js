@@ -304,6 +304,20 @@ const OLD_COPENHAGEN_CUE = 'Short lever: knee on the bench · body straight · l
 const matches = (list, ids) => list.length === ids.length
   && list.every((x, i) => (ids[i] === '*row_er' ? x.id.endsWith('row_er') : x.id === ids[i]));
 
+/** A day replaced by the seed's; exercises the user already has keep their name, cue and load. */
+function rebuildFromSeed(program, day, loc) {
+  const unit = program.unit || 'lb';
+  const existing = new Map(allProgramExercises(program).map((x) => [x.id, x]));
+  const next = programList(SEED_PROGRAM, day, loc).map((ex) => {
+    const mine = existing.get(ex.id);
+    if (!mine) return { ...ex, increment: convertIncrement(ex.increment, 'lb', unit) };
+    const out = { ...mine };
+    for (const k of SLOT_KEYS) { if (ex[k] === undefined) delete out[k]; else out[k] = ex[k]; }
+    return out;
+  });
+  return withProgramList(program, day, loc, next);
+}
+
 /**
  * Copenhagens back, carries on Wednesday (Oct 2026). Copenhagen plank returns
  * to Armor as 2 sets right, 1 left (an old right adductor magnus injury). The
@@ -312,7 +326,6 @@ const matches = (list, ids) => list.length === ids.length
  * keep their name, cue and load.
  */
 export function copenhagenCarryUpdate(program) {
-  const unit = program.unit || 'lb';
   let p = program;
   const changes = [];
   // Copenhagen at its old per-side default becomes right ×2, left ×1
@@ -323,17 +336,7 @@ export function copenhagenCarryUpdate(program) {
     p = updateEverywhere(p, cph.id, { ...rest, cue: seedCph.cue });
     changes.push('Copenhagen plank: sets 1–2 right leg on the bench, set 3 left');
   }
-  const rebuild = (day, loc) => {
-    const existing = new Map(allProgramExercises(p).map((x) => [x.id, x]));
-    const next = programList(SEED_PROGRAM, day, loc).map((ex) => {
-      const mine = existing.get(ex.id);
-      if (!mine) return { ...ex, increment: convertIncrement(ex.increment, 'lb', unit) };
-      const out = { ...mine };
-      for (const k of SLOT_KEYS) { if (ex[k] === undefined) delete out[k]; else out[k] = ex[k]; }
-      return out;
-    });
-    p = withProgramList(p, day, loc, next);
-  };
+  const rebuild = (day, loc) => { p = rebuildFromSeed(p, day, loc); };
   for (const loc of ['gym', 'home']) {
     if (loc === 'home' && !p.home) continue;
     const label = loc === 'home' ? 'Home ' : '';
@@ -387,6 +390,46 @@ export function pairOrderUpdate(program) {
   return { program: p, changes };
 }
 
+// Mon/Fri as the pair-order update left them.
+const CALFLESS = {
+  gym: {
+    mon: ['hack_squat', 'side_lying_cuff_supersets', 'chest_press', 'cs_row', 'leg_curl', 'db_lateral_raise', 'tri_pushdown', 'standing_bicep_curl', 'pallof', 'hammer_curl', 'sleeper_stretch'],
+    fri: ['hack_squat', 'side_lying_cuff_supersets', 'single_arm_pulldown', 'landmine_press', 'leg_ext', 'leg_curl', 'db_lateral_raise', 'tri_pushdown', 'body_saw', 'preacher_machine', 'sleeper_stretch', 'hammer_curl'],
+  },
+  home: {
+    mon: ['goblet_squat', 'side_lying_cuff_supersets', 'db_bench_press', 'db_chest_supported_row', 'band_leg_curl', 'db_lateral_raise', 'band_pushdown', 'standing_bicep_curl', 'band_pallof', 'hammer_curl', 'sleeper_stretch'],
+    fri: ['goblet_squat', 'side_lying_cuff_supersets', 'band_lat_pulldown', 'incline_db_press', 'band_leg_extension', 'band_leg_curl', 'db_lateral_raise', 'band_pushdown', 'body_saw', 'concentration_curl', 'sleeper_stretch', 'hammer_curl'],
+  },
+};
+const CALF_CHANGES = {
+  gym: ['Mon: leg press calf raise 2 × 12–20, paired with the sleeper stretch; Fri: seated calf raise 2 × 12–20, paired with hammer curls (the sleeper stretch ends Friday alone)',
+    'Mon/Fri: triceps pushdown 2 sets (was 3)'],
+  home: ['Home Mon: single-leg calf raise 2 × 12–20/side, paired with the sleeper stretch; Home Fri: seated DB calf raise 2 × 12–20, paired with hammer curls',
+    'Home Mon/Fri: band triceps pushdown 2 sets (was 3)'],
+};
+
+/**
+ * Calves and triceps (Oct 2026): calves had no direct work, so Monday gets a
+ * straight-knee calf raise and Friday a bent-knee one, 2 sets each; Monday and
+ * Friday pushdowns drop to 2 sets. Days still in their shipped form are
+ * rebuilt; exercises the user already has keep their name, cue and load.
+ */
+export function calvesUpdate(program) {
+  let p = program;
+  const changes = [];
+  for (const loc of ['gym', 'home']) {
+    if (loc === 'home' && !p.home) continue;
+    let changed = false;
+    for (const day of ['mon', 'fri']) {
+      if (!matches(programList(p, day, loc), CALFLESS[loc][day])) continue;
+      p = rebuildFromSeed(p, day, loc);
+      changed = true;
+    }
+    if (changed) changes.push(...CALF_CHANGES[loc]);
+  }
+  return { program: p, changes };
+}
+
 export const PROGRAM_UPDATES = [
   { id: 'full-body-3day-2026-10', title: '3-day full body + Armor', apply: fullBodyUpdate, undo: false },
   { id: 'cuff-straight-arm-2026-10', title: 'Shoulder superset cue', apply: cuffCueUpdate },
@@ -398,4 +441,5 @@ export const PROGRAM_UPDATES = [
   { id: 'recovery-armor-2026-10', title: 'Armor for recovery', apply: recoveryArmorUpdate },
   { id: 'copenhagen-carry-2026-10', title: 'Copenhagens back, carries on Wednesday', apply: copenhagenCarryUpdate },
   { id: 'pair-order-2026-10', title: 'Three-set exercise first in a pair', apply: pairOrderUpdate },
+  { id: 'calves-2026-10', title: 'Calves Mon/Fri, pushdowns 2 sets', apply: calvesUpdate },
 ];
