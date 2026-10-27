@@ -47,7 +47,9 @@ const SIDE_PLANK = { id: 'side_plank', name: 'Side plank', increment: 0, bodywei
 // Two weeks in place of the dead bug while the left adductor and hip flexor
 // grip in 90-90; swap the dead bug back in (its history is kept) once wk 2 is clean.
 const SUPPORTED_DEAD_BUG = { id: 'supported_dead_bug', name: 'Supported dead bug', increment: 0, bodyweight: true, perSide: true, cue: 'Wk 1: calves on a bench, arm reaches only, on a long exhale → once clean, hands press into knees, 5-s holds · Wk 2: one hand presses its knee while the other leg reaches low, clean side first · end the set when the left adductor grips' };
-const CUFF = { id: 'side_lying_cuff_supersets', name: 'Right-shoulder superset', increment: 1, cue: 'Side-lying, straight arm: ER → horizontal abduction → flexion · progress reps, then weight' };
+// Horizontal abduction and flexion only: ER is easy and the row to ER covers it,
+// and a straight arm past 1 lb aches at the front of the shoulder.
+const CUFF = { id: 'side_lying_cuff_supersets', name: 'Right-shoulder superset', increment: 0.5, cue: 'Side-lying, straight arm, 1 lb: horizontal abduction, stop at the body line → flexion, stop short of overhead, before any pinch · 2-s pause up, 3-s down · end the set when form slips (shrug, trunk rolls back, elbow bends)' };
 const CARRY = { id: 'suitcase_carry', name: 'Suitcase carry', increment: 5, perHand: true, perSide: true, measure: 'distance', cue: 'One DB at your side · stand tall, don’t lean · slow steps' };
 const FLY = { id: 'supine_db_fly', name: 'Supine DB fly (PT)', increment: 1, perHand: true, cue: 'Super light · slow lowering, only as wide as the shoulder stays centered · control drill, not chest training' };
 const ADDUCTOR_RB = { id: 'adductor_rock_back', name: 'Adductor rock-back', increment: 0, bodyweight: true, perSide: true, cue: 'Hands and knees, one leg out to the side · rock back with the spine still · stop before the back rounds' };
@@ -55,13 +57,13 @@ const HIP_FLEXOR = { id: 'hip_flexor_stretch', name: 'Half-kneeling hip flexor s
 
 // Daily shoulder control: an easy primer on lifting days (between the first
 // lower-body exercise's sets, or before Wednesday's), the full dose on Armor.
-const primer = () => ({ ...CUFF, sets: 2, repMin: 10, repMax: 12, restSec: 30 });
-const pairedPrimer = () => p(CUFF, 2, 10, 12, 60, 'A');
+const primer = () => ({ ...CUFF, sets: 2, repMin: 8, repMax: 10, restSec: 30 });
+const pairedPrimer = () => p(CUFF, 2, 8, 10, 60, 'A');
 
 const armor = (rowEr) => [
   p(COPENHAGEN, 3, 15, 30, 30, 'A'), p(BIRD_DOG, 3, 6, 6, 45, 'A'),
   p(SIDE_PLANK, 3, 30, 60, 30, 'B'), p(SUPPORTED_DEAD_BUG, 3, 5, 6, 45, 'B'),
-  p(CUFF, 3, 12, 15, 30, 'C'), p(CARRY, 3, 30, 40, 60, 'C'),
+  p(CUFF, 3, 8, 15, 30, 'C'), p(CARRY, 3, 30, 40, 60, 'C'),
   p(FLY, 2, 12, 15, 30, 'D'), p(ADDUCTOR_RB, 2, 8, 8, 30, 'D'),
   p(rowEr, 2, 12, 15, 30, 'E'), p(HIP_FLEXOR, 2, 30, 30, 30, 'E'),
 ];
@@ -139,15 +141,16 @@ export const SEED_PROGRAM = {
 
 // Shown at the top of a session and in the program editor.
 const WARMUP = 'Warm-up, about 7 min: 3 min bike or brisk walk · quadruped rock-back ×8 · 90/90 hip switches ×6/side · bird dog ×5/side.';
-const PRIMER_PAIRED = 'The right-shoulder primer is A2: easy sets between the squats, before you press and pull.';
-const PRIMER_FIRST = 'Then the right-shoulder primer: easy sets, before you press and pull.';
+const PRIMER_PAIRED = 'The right-shoulder primer is A2: easy sets between the squats, before you press and pull. 1 lb, stop well short of fatigue: practice, not training.';
+const PRIMER_FIRST = 'Then the right-shoulder primer: easy sets, before you press and pull. 1 lb, stop well short of fatigue: practice, not training.';
 const ARMOR_OPENER = 'Opener, about 3 min: 90-90 breathing, feet on the wall, heels pressing lightly (5 long exhales with a 2–3 s pause, twice) · adductor rock-back ×8/side. A hand on the left inner thigh should feel it stay quiet.';
+const CUFF_GOALS = 'Right-shoulder superset is the hard dose today. Goal: 3 × 15 at 1 lb with 3-s holds and no front-of-shoulder ache → then 1.5 lb (wrist weight), not 2. A dull ache up to 2/10 that’s gone within an hour is OK; a pinch, or a shoulder that’s worse the next day → shorter range. More load later: bend the elbow and use 2 lb.';
 const PAIRS = 'Pairs (A1, A2): alternate their sets. The rest timer shows what’s next.';
 export const DAY_NOTES = {
   mon: [WARMUP, PRIMER_PAIRED, PAIRS],
   wed: [`${WARMUP} ${PRIMER_FIRST}`, PAIRS],
   fri: [WARMUP, PRIMER_PAIRED, PAIRS],
-  armor: [ARMOR_OPENER, PAIRS, 'Then 30–40 min Zone 2 cardio: incline walk or bike, at a pace where you can still talk.'],
+  armor: [ARMOR_OPENER, CUFF_GOALS, PAIRS, 'Then 30–40 min Zone 2 cardio: incline walk or bike, at a pace where you can still talk.'],
 };
 
 export const DEFAULT_SETTINGS = {

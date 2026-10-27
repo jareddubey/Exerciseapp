@@ -5,7 +5,7 @@
 //
 // The earlier A/B updates (arms-shoulders-2026-10, home-workouts-2026-10) were
 // superseded by the 3-day redesign, which replaces the whole program.
-import { convertProgramUnits, convertIncrement, isDayProgram, allProgramExercises, updateEverywhere, programList, withProgramList, SLOT_KEYS } from './logic.js';
+import { convertProgramUnits, convertIncrement, isDayProgram, allProgramExercises, updateEverywhere, programList, withProgramList, SLOT_KEYS, SLOTS } from './logic.js';
 import { SEED_PROGRAM } from './seed.js';
 
 /** 3-day full body + Armor (Oct 2026): replaces an A/B program, gym and home. */
@@ -25,6 +25,7 @@ export function fullBodyUpdate(program) {
   };
 }
 
+const STRAIGHT_ARM_CUE = 'Side-lying, straight arm: ER → horizontal abduction → flexion · progress reps, then weight';
 const OLD_CUFF_CUE = 'Side-lying ER → horizontal abduction (elbow bent 90°, only to body line) → flexion · progress lever, then weight';
 
 /**
@@ -35,7 +36,7 @@ const OLD_CUFF_CUE = 'Side-lying ER → horizontal abduction (elbow bent 90°, o
 export function cuffCueUpdate(program) {
   const ex = allProgramExercises(program).find((x) => x.id === 'side_lying_cuff_supersets');
   if (!ex || ex.cue !== OLD_CUFF_CUE) return { program, changes: [] };
-  const cue = allProgramExercises(SEED_PROGRAM).find((x) => x.id === ex.id).cue;
+  const cue = STRAIGHT_ARM_CUE; // cuffDoseUpdate takes it from here to the current cue
   return {
     program: updateEverywhere(program, ex.id, { ...ex, cue }),
     changes: [`${ex.name}: straight arm side-lying (new cue: “${cue}”)`],
@@ -188,10 +189,44 @@ export function supportedDeadBugUpdate(program) {
   return { program: p, changes };
 }
 
+/**
+ * Right-shoulder superset dose (Oct 2026): horizontal abduction and flexion
+ * only, at 1 lb with pauses, since ER is easy and 2 lb straight-arm aches at the
+ * front of the shoulder. Armor is the hard dose (3 × 8–15), primers stay easy
+ * (2 × 8–10), and load goes up 0.5 lb at a time. Only a superset still at its
+ * shipped cue changes, so the user's own edit is kept.
+ */
+export function cuffDoseUpdate(program) {
+  const ex = allProgramExercises(program).find((x) => x.id === CUFF_ID);
+  if (!ex || ex.cue !== STRAIGHT_ARM_CUE) return { program, changes: [] };
+  const seedEx = allProgramExercises(SEED_PROGRAM).find((x) => x.id === CUFF_ID);
+  const unit = program.unit || 'lb';
+  let p = updateEverywhere(program, CUFF_ID, { ...ex, cue: seedEx.cue, increment: convertIncrement(seedEx.increment, 'lb', unit) });
+  for (const [loc, day] of SLOTS) {
+    if (loc === 'home' && !p.home) continue;
+    const list = programList(p, day, loc);
+    const i = list.findIndex((x) => x.id === CUFF_ID);
+    if (i < 0) continue;
+    const [repMin, repMax] = day === 'armor' ? [8, 15] : [8, 10];
+    const next = [...list];
+    next[i] = { ...list[i], repMin, repMax };
+    p = withProgramList(p, day, loc, next);
+  }
+  return {
+    program: p,
+    changes: [
+      `${ex.name}: horizontal abduction and flexion only, 1 lb, 2-s pause up and 3-s down (ER is covered by the row to ER)`,
+      'Armor is its hard dose (3 × 8–15); the lifting-day primer stays easy (2 × 8–10)',
+      'Goal 3 × 15 with 3-s holds, then 1.5 lb: load goes up 0.5 lb at a time',
+    ],
+  };
+}
+
 export const PROGRAM_UPDATES = [
   { id: 'full-body-3day-2026-10', title: '3-day full body + Armor', apply: fullBodyUpdate, undo: false },
   { id: 'cuff-straight-arm-2026-10', title: 'Shoulder superset cue', apply: cuffCueUpdate },
   { id: 'control-work-armor-2026-10', title: 'Shoulder control work on Armor', apply: controlWorkUpdate },
   { id: 'pairing-curls-2026-10', title: 'Pairs by room, landmine press, curls 3×/week', apply: pairingUpdate },
   { id: 'supported-dead-bug-2026-10', title: 'Supported dead bug on Armor', apply: supportedDeadBugUpdate },
+  { id: 'cuff-dose-2026-10', title: 'Right-shoulder superset dose', apply: cuffDoseUpdate },
 ];

@@ -5,7 +5,7 @@ import {
   suggestWeight, prefillWeights, lastFor, formatSets, formatTarget, convertProgramUnits, noIncrement, pairLabels, nextUp,
   isDayProgram, slotName, dayLabel, dayTitle, DAY,
 } from '../app/js/logic.js';
-import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
+import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
 import { SEED_PROGRAM, HOME_PROGRAM, DAY_NOTES } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday
@@ -51,7 +51,7 @@ test('seed: every day is well formed, in pairs (a lone finisher at most)', () =>
     const list = programList(SEED_PROGRAM, day, loc);
     // daily shoulder control: the primer every lifting day, A2 with the first squat Mon/Fri
     const primer = list.find((x) => x.id === 'side_lying_cuff_supersets');
-    assert.deepEqual([primer.sets, primer.repMax], [2, 12], `${loc} ${day} primer`);
+    assert.deepEqual([primer.sets, primer.repMax], [2, 10], `${loc} ${day} primer`);
     if (day !== 'wed') assert.deepEqual(pairLabels(list).slice(0, 2), ['A1', 'A2']);
     if (day !== 'wed') assert.equal(list[1].id, 'side_lying_cuff_supersets');
     // PT: regular curls and hammer curls 3×/week
@@ -223,13 +223,41 @@ test('cuff cue update: changes the old default cue on every day, keeps a user ed
   assert.equal(changes.length, 1);
   for (const loc of ['gym', 'home']) {
     const ex = programList(program, 'armor', loc).find((x) => x.id === 'side_lying_cuff_supersets');
-    assert.equal(ex.cue, find('armor', 'side_lying_cuff_supersets').cue);
+    assert.equal(ex.cue, STRAIGHT_ARM_CUE);
     assert.equal(ex.sets, 3);
   }
   assert.deepEqual(cuffCueUpdate(program).changes, []);
   const mine = updateEverywhere(SEED_PROGRAM, 'side_lying_cuff_supersets', { ...find('armor', 'side_lying_cuff_supersets'), cue: 'my cue' });
   assert.deepEqual(cuffCueUpdate(mine).changes, []);
   assert.match(find('armor', 'side_lying_cuff_supersets').cue, /straight arm/);
+  // the dose update takes it on to the current cue
+  assert.equal(allProgramExercises(cuffDoseUpdate(program).program).find((x) => x.id === 'side_lying_cuff_supersets').cue,
+    find('armor', 'side_lying_cuff_supersets').cue);
+});
+const STRAIGHT_ARM_CUE = 'Side-lying, straight arm: ER → horizontal abduction → flexion · progress reps, then weight';
+
+test('cuff dose update: 1 lb HA + flexion, hard on Armor, easy primers, 0.5 lb steps; keeps a user edit', () => {
+  let old = { ...structuredClone(SEED_PROGRAM), unit: 'lb' };
+  old = updateEverywhere(old, 'side_lying_cuff_supersets', { ...find('armor', 'side_lying_cuff_supersets'), cue: STRAIGHT_ARM_CUE, increment: 1 });
+  for (const [loc, day] of SLOTS) {
+    const list = programList(old, day, loc);
+    old = withProgramList(old, day, loc, list.map((x) => (x.id === 'side_lying_cuff_supersets'
+      ? { ...x, ...(day === 'armor' ? { repMin: 12, repMax: 15 } : { repMin: 10, repMax: 12 }) } : x)));
+  }
+  const { program, changes } = cuffDoseUpdate(old);
+  assert.equal(changes.length, 3);
+  for (const [loc, day] of SLOTS) {
+    const got = programList(program, day, loc).find((x) => x.id === 'side_lying_cuff_supersets');
+    assert.deepEqual(got, find(day, 'side_lying_cuff_supersets', loc), `${loc} ${day}`);
+  }
+  assert.deepEqual(cuffDoseUpdate(program).changes, [], 'idempotent');
+  assert.deepEqual(cuffDoseUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
+  const kg = cuffDoseUpdate({ ...old, unit: 'kg' }).program;
+  assert.equal(kg.armor.find((x) => x.id === 'side_lying_cuff_supersets').increment, 1.25);
+  const mine = updateEverywhere(old, 'side_lying_cuff_supersets', { ...find('armor', 'side_lying_cuff_supersets'), cue: 'my cue' });
+  assert.deepEqual(cuffDoseUpdate(mine).changes, [], 'a cue the user edited is left alone');
+  assert.ok(DAY_NOTES.armor.some((t) => /3 × 15 at 1 lb/.test(t)));
+  assert.ok(DAY_NOTES.mon.some((t) => /well short of fatigue/.test(t)));
 });
 
 test('control work update: moves shoulder drills to Armor on a program in its shipped form', () => {
