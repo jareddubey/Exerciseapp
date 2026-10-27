@@ -70,10 +70,10 @@ export function controlWorkUpdate(program) {
     for (const day of ['mon', 'wed', 'fri']) {
       const list = programList(p, day, loc);
       if (list.some((x) => x.id === CUFF_ID)) continue;
-      const mine = allProgramExercises(p).find((x) => x.id === CUFF_ID);
-      const seedEx = programList(SEED_PROGRAM, day, loc)[0];
-      const primer = mine ? { ...mine, ...Object.fromEntries(SLOT_KEYS.map((k) => [k, seedEx[k]])) } : fromSeed(seedEx);
-      if (primer.group === undefined) delete primer.group;
+      const mine = allProgramExercises(p).find((x) => x.id === CUFF_ID)
+        || fromSeed(programList(SEED_PROGRAM, 'armor', loc).find((x) => x.id === CUFF_ID));
+      const primer = { ...mine, sets: 2, repMin: 10, repMax: 12, restSec: 30 };
+      delete primer.group;
       p = withProgramList(p, day, loc, [primer, ...list]);
       primed.push(day.charAt(0).toUpperCase() + day.slice(1));
     }
@@ -101,8 +101,74 @@ export function controlWorkUpdate(program) {
   return { program: p, changes };
 }
 
+// Mon/Wed/Fri as the control-work update left them.
+const SHIPPED_DAYS = {
+  gym: {
+    mon: ['side_lying_cuff_supersets', 'hack_squat', 'pallof', 'incline_press', 'cs_row', 'leg_curl', 'db_lateral_raise', 'biceps_curl', 'tri_pushdown'],
+    wed: ['side_lying_cuff_supersets', 'kickstand_rdl', 'lat_pull_down', 'leg_press', 'push_up', 'glut_bridge', 'reverse_pec_deck', 'hammer_curl', 'cable_tri_ext'],
+    fri: ['side_lying_cuff_supersets', 'hack_squat', 'pallof', 'single_arm_pulldown', 'chest_press', 'leg_ext', 'leg_curl', 'db_lateral_raise', 'tri_pushdown', 'preacher_machine', 'body_saw'],
+  },
+  home: {
+    mon: ['side_lying_cuff_supersets', 'goblet_squat', 'band_pallof', 'incline_db_press', 'db_chest_supported_row', 'band_leg_curl', 'db_lateral_raise', 'standing_bicep_curl', 'band_pushdown'],
+    wed: ['side_lying_cuff_supersets', 'kickstand_rdl', 'band_lat_pulldown', 'step_back_lunge', 'push_up', 'glut_bridge', 'band_pull_apart', 'hammer_curl', 'band_pushdown'],
+    fri: ['side_lying_cuff_supersets', 'goblet_squat', 'band_pallof', 'band_lat_pulldown', 'db_bench_press', 'band_leg_extension', 'band_leg_curl', 'db_lateral_raise', 'band_pushdown', 'concentration_curl', 'body_saw'],
+  },
+};
+// Default cues this update rewrites (a cue the user edited is kept).
+const OLD_CUES = { standing_bicep_curl: 'Elbows still at your sides', chest_press: 'Flat · neutral grip · stop handles at torso', preacher_machine: '' };
+const PAIRING_CHANGES = {
+  gym: [
+    'Mon/Fri: shoulder primer is A2 with hack squat (same room); Pallof moves to Monday with hammer curls, off Friday',
+    'Mon: flat chest press machine replaces the low-incline press; Fri: half-kneeling landmine press replaces the chest press',
+    'Curls and hammer curls every lifting day, 2 sets each: standing DB curl Mon/Wed, preacher Fri',
+  ],
+  home: [
+    'Home Mon/Fri: shoulder primer is A2 with the goblet squat; band Pallof moves to Monday, off Friday',
+    'Home Mon: DB bench press; Fri: incline DB press',
+    'Home: curls and hammer curls every lifting day, 2 sets each',
+  ],
+};
+
+/**
+ * Pairing and curls (Oct 2026): the primer pairs with the first squat (the
+ * hack squat is in a different room from the cables), flat machine press on
+ * Monday and landmine press on Friday, and both curl types 3×/week. Days still
+ * in their shipped form are replaced; exercises the user already has keep
+ * their name, cue and load.
+ */
+export function pairingUpdate(program) {
+  const unit = program.unit || 'lb';
+  const existing = new Map(allProgramExercises(program).map((x) => [x.id, x]));
+  let p = program;
+  const changes = [];
+  for (const loc of ['gym', 'home']) {
+    let changed = false;
+    for (const day of ['mon', 'wed', 'fri']) {
+      if (programList(p, day, loc).map((x) => x.id).join() !== SHIPPED_DAYS[loc][day].join()) continue;
+      const next = programList(SEED_PROGRAM, day, loc).map((ex) => {
+        const mine = existing.get(ex.id);
+        if (!mine) return { ...ex, increment: convertIncrement(ex.increment, 'lb', unit) };
+        const out = { ...mine };
+        for (const k of SLOT_KEYS) { if (ex[k] === undefined) delete out[k]; else out[k] = ex[k]; }
+        if (OLD_CUES[out.id] === out.cue) out.cue = ex.cue;
+        return out;
+      });
+      p = withProgramList(p, day, loc, next);
+      changed = true;
+    }
+    if (changed) changes.push(...PAIRING_CHANGES[loc]);
+  }
+  // keep a rewritten cue the same on every day the exercise appears
+  for (const id of Object.keys(OLD_CUES)) {
+    const ex = allProgramExercises(p).find((x) => x.id === id && x.cue !== OLD_CUES[id]);
+    if (ex) p = updateEverywhere(p, id, ex);
+  }
+  return { program: p, changes };
+}
+
 export const PROGRAM_UPDATES = [
   { id: 'full-body-3day-2026-10', title: '3-day full body + Armor', apply: fullBodyUpdate, undo: false },
   { id: 'cuff-straight-arm-2026-10', title: 'Shoulder superset cue', apply: cuffCueUpdate },
   { id: 'control-work-armor-2026-10', title: 'Shoulder control work on Armor', apply: controlWorkUpdate },
+  { id: 'pairing-curls-2026-10', title: 'Pairs by room, landmine press, curls 3×/week', apply: pairingUpdate },
 ];

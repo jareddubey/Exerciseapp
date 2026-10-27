@@ -17,11 +17,9 @@ const p = (ex, sets, repMin, repMax, restSec, group) => ({ ...ex, sets, repMin, 
 // ---------- gym ----------
 const HACK = { id: 'hack_squat', name: 'Hack squat', increment: 10, cue: 'Warm-up sets first, as straight sets · back flat on pad · stop before pelvis tucks' };
 const PALLOF = { id: 'pallof', name: 'Cable Pallof press', increment: 2.5, perSide: true, cue: 'Resist the rotation · ribs down · slow' };
-const INCLINE = { id: 'incline_press', name: 'Low-incline machine press', increment: 5, cue: '15–30° · neutral grip · stop handles at torso, elbows ~45° · flat press if it irritates' };
 const CS_ROW = { id: 'cs_row', name: 'Chest-supported row', increment: 5, cue: 'Neutral grip · stop elbows at the torso line, no yanking past' };
 const LEG_CURL = { id: 'leg_curl', name: 'Seated leg curl', increment: 5, cue: '' };
 const LATERAL = { id: 'db_lateral_raise', name: 'DB lateral raise', increment: 2.5, perHand: true, cue: 'Light · to shoulder height · thumbs level, no pouring · arms slightly forward' };
-const CURL = { id: 'biceps_curl', name: 'Cable biceps curl', increment: 5, cue: 'Arms in front, elbows still · add reps and slow the lowering before adding weight' };
 const PUSHDOWN = { id: 'tri_pushdown', name: 'Rope triceps pushdown', increment: 5, cue: 'Elbows pinned · spread the rope at the bottom' };
 const KICKSTAND = { id: 'kickstand_rdl', name: 'Kickstand RDL', increment: 5, perSide: true, cue: 'One DB in front, both hands · 3 s down · stop when the pelvis stops tipping (tap the box) · lower the box as the hip opens' };
 const LAT_PD = { id: 'lat_pull_down', name: 'Lat pulldown (neutral grip)', increment: 5, cue: 'Light · full stretch only as far as the shoulder is happy' };
@@ -33,9 +31,10 @@ const REVERSE_PEC = { id: 'reverse_pec_deck', name: 'Reverse pec deck', incremen
 const HAMMER = { id: 'hammer_curl', name: 'Hammer curl', increment: 5, perHand: true, cue: '' };
 const SA_PUSHDOWN = { id: 'cable_tri_ext', name: 'Single-arm cable pushdown', increment: 2.5, perSide: true, cue: 'D-handle · elbow still at your side · squeeze at lockout' };
 const SA_PULLDOWN = { id: 'single_arm_pulldown', name: 'Single-arm cable pulldown', increment: 2.5, perSide: true, cue: 'D-handle, seated or half-kneeling · elbow to back pocket · or swap for a close-grip V-handle pulldown' };
-const CHEST_PRESS = { id: 'chest_press', name: 'Chest press machine', increment: 5, cue: 'Flat · neutral grip · stop handles at torso' };
+const CHEST_PRESS = { id: 'chest_press', name: 'Chest press machine', increment: 5, cue: 'Flat · neutral grip · stop handles at torso, elbows ~45°' };
+const LANDMINE = { id: 'landmine_press', name: 'Half-kneeling landmine press', increment: 2.5, perSide: true, cue: 'Log plates only · knee down on the pressing side · neutral grip on the bar end · press up and forward, stop short of any front-of-shoulder pinch' };
 const LEG_EXT = { id: 'leg_ext', name: 'Leg extension', increment: 5, cue: 'If it stalls, check seat depth and pad position' };
-const PREACHER = { id: 'preacher_machine', name: 'Preacher curl machine', increment: 5, cue: '' };
+const PREACHER = { id: 'preacher_machine', name: 'Preacher curl machine', increment: 5, cue: 'Control the lowering · don’t bounce out of the bottom' };
 const BODY_SAW = { id: 'body_saw', name: 'Body saw', increment: 0, bodyweight: true, measure: 'time', cue: 'Forearm plank, feet on sliders or a towel · rock 2–3 in back and forth · plain plank if the shoulder complains' };
 
 // ---------- armor ----------
@@ -52,8 +51,10 @@ const FLY = { id: 'supine_db_fly', name: 'Supine DB fly (PT)', increment: 1, per
 const ADDUCTOR_RB = { id: 'adductor_rock_back', name: 'Adductor rock-back', increment: 0, bodyweight: true, perSide: true, cue: 'Hands and knees, one leg out to the side · rock back with the spine still · stop before the back rounds' };
 const HIP_FLEXOR = { id: 'hip_flexor_stretch', name: 'Half-kneeling hip flexor stretch', increment: 0, bodyweight: true, perSide: true, measure: 'time', cue: 'Squeeze the back-leg glute · ribs down · extra set on the left' };
 
-// Daily shoulder control: an easy primer before lifting, the full dose on Armor.
+// Daily shoulder control: an easy primer on lifting days (between the first
+// lower-body exercise's sets, or before Wednesday's), the full dose on Armor.
 const primer = () => ({ ...CUFF, sets: 2, repMin: 10, repMax: 12, restSec: 30 });
+const pairedPrimer = () => p(CUFF, 2, 10, 12, 60, 'A');
 
 const armor = (rowEr) => [
   p(COPENHAGEN, 3, 15, 30, 30, 'A'), p(BIRD_DOG, 3, 6, 6, 45, 'A'),
@@ -69,7 +70,7 @@ const BAND_PALLOF = { id: 'band_pallof', name: 'Band Pallof press', increment: 0
 const INCLINE_DB = { id: 'incline_db_press', name: 'Incline DB press', increment: 5, perHand: true, cue: 'Low incline (15–30°) · neutral grip · stop at chest, elbows ~45°' };
 const DB_ROW = { id: 'db_chest_supported_row', name: 'Chest-supported incline DB row', increment: 5, perHand: true, cue: 'Chest on ~30° bench · neutral grip · no shrug' };
 const BAND_LEG_CURL = { id: 'band_leg_curl', name: 'Seated band leg curl', increment: 0, band: true, cue: 'Band anchored low in front · curl heel under the bench · slow return' };
-const STANDING_CURL = { id: 'standing_bicep_curl', name: 'Standing bicep curl', increment: 5, perHand: true, cue: 'Elbows still at your sides' };
+const STANDING_CURL = { id: 'standing_bicep_curl', name: 'Standing bicep curl', increment: 5, perHand: true, cue: 'Elbows at your sides · don’t let them drift back at the bottom · add reps before weight' };
 const BAND_PUSHDOWN = { id: 'band_pushdown', name: 'Band triceps pushdown', increment: 0, band: true, cue: 'Band over the pull-up bar · elbows pinned' };
 const BAND_LAT = { id: 'band_lat_pulldown', name: 'Band lat pulldown', increment: 0, band: true, cue: 'Band over the pull-up bar · half-kneeling · neutral grip · elbows to ribs' };
 const LUNGE = { id: 'step_back_lunge', name: 'Step-back lunge', increment: 5, perHand: true, perSide: true, cue: 'DBs at your sides · step back, torso tall · shorter step if the left hip complains' };
@@ -81,64 +82,68 @@ const CONC_CURL = { id: 'concentration_curl', name: 'Concentration curl', increm
 
 export const HOME_PROGRAM = {
   mon: [
-    primer(),
-    p(GOBLET, 3, 10, 15, 60, 'A'), p(BAND_PALLOF, 3, 10, 10, 60, 'A'),
-    p(INCLINE_DB, 3, 10, 12, 45, 'B'), p(DB_ROW, 3, 10, 12, 90, 'B'),
+    p(GOBLET, 3, 10, 15, 60, 'A'), pairedPrimer(),
+    p(DB_BENCH, 3, 10, 12, 45, 'B'), p(DB_ROW, 3, 10, 12, 90, 'B'),
     p(BAND_LEG_CURL, 3, 12, 20, 30, 'C'), p(LATERAL, 3, 12, 20, 60, 'C'),
-    p(STANDING_CURL, 3, 10, 15, 30, 'D'), p(BAND_PUSHDOWN, 3, 12, 20, 60, 'D'),
+    p(STANDING_CURL, 2, 10, 15, 30, 'D'), p(BAND_PUSHDOWN, 3, 12, 20, 60, 'D'),
+    p(HAMMER, 2, 10, 12, 30, 'E'), p(BAND_PALLOF, 3, 10, 10, 60, 'E'),
   ],
   wed: [
     primer(),
     p(KICKSTAND, 3, 8, 10, 60, 'A'), p(BAND_LAT, 3, 12, 20, 90, 'A'),
     p(LUNGE, 3, 8, 12, 45, 'B'), p(PUSH_UP, 3, 8, 15, 90, 'B'),
     p(BRIDGE, 3, 12, 20, 30, 'C'), p(BAND_PULL_APART, 2, 12, 15, 60, 'C'),
-    p(HAMMER, 3, 10, 12, 30, 'D'), p(BAND_PUSHDOWN, 2, 12, 20, 60, 'D'),
+    p(HAMMER, 2, 10, 12, 30, 'D'), p(BAND_PUSHDOWN, 2, 12, 20, 60, 'D'),
+    p(STANDING_CURL, 2, 10, 15, 60, 'E'),
   ],
   fri: [
-    primer(),
-    p(GOBLET, 2, 12, 15, 60, 'A'), p(BAND_PALLOF, 2, 10, 10, 60, 'A'),
-    p(BAND_LAT, 3, 12, 20, 45, 'B'), p(DB_BENCH, 3, 10, 12, 90, 'B'),
+    p(GOBLET, 2, 12, 15, 60, 'A'), pairedPrimer(),
+    p(BAND_LAT, 3, 12, 20, 45, 'B'), p(INCLINE_DB, 3, 10, 12, 90, 'B'),
     p(BAND_LEG_EXT, 3, 15, 25, 30, 'C'), p(BAND_LEG_CURL, 2, 12, 20, 60, 'C'),
     p(LATERAL, 3, 12, 20, 30, 'D'), p(BAND_PUSHDOWN, 3, 12, 20, 60, 'D'),
-    p(CONC_CURL, 3, 10, 15, 30, 'E'), p(BODY_SAW, 3, 20, 30, 60, 'E'),
+    p(CONC_CURL, 2, 10, 15, 30, 'E'), p(BODY_SAW, 3, 20, 30, 60, 'E'),
+    p(HAMMER, 2, 10, 12, 60, 'F'),
   ],
   armor: armor(BAND_ROW_ER),
 };
 
 export const SEED_PROGRAM = {
   mon: [
-    primer(),
-    p(HACK, 3, 6, 10, 60, 'A'), p(PALLOF, 3, 10, 10, 60, 'A'),
-    p(INCLINE, 3, 8, 12, 45, 'B'), p(CS_ROW, 3, 8, 12, 90, 'B'),
+    p(HACK, 3, 6, 10, 60, 'A'), pairedPrimer(),
+    p(CHEST_PRESS, 3, 8, 12, 45, 'B'), p(CS_ROW, 3, 8, 12, 90, 'B'),
     p(LEG_CURL, 3, 10, 15, 30, 'C'), p(LATERAL, 3, 12, 20, 60, 'C'),
-    p(CURL, 3, 10, 15, 30, 'D'), p(PUSHDOWN, 3, 10, 15, 60, 'D'),
+    p(STANDING_CURL, 2, 10, 15, 30, 'D'), p(PUSHDOWN, 3, 10, 15, 60, 'D'),
+    p(HAMMER, 2, 10, 12, 30, 'E'), p(PALLOF, 3, 10, 10, 60, 'E'),
   ],
   wed: [
     primer(),
     p(KICKSTAND, 3, 8, 10, 60, 'A'), p(LAT_PD, 3, 10, 12, 90, 'A'),
     p(LEG_PRESS, 3, 10, 15, 45, 'B'), p(PUSH_UP, 3, 8, 15, 90, 'B'),
     p(BRIDGE, 3, 12, 20, 30, 'C'), p(REVERSE_PEC, 2, 12, 15, 60, 'C'),
-    p(HAMMER, 3, 10, 12, 30, 'D'), p(SA_PUSHDOWN, 2, 12, 15, 60, 'D'),
+    p(HAMMER, 2, 10, 12, 30, 'D'), p(SA_PUSHDOWN, 2, 12, 15, 60, 'D'),
+    p(STANDING_CURL, 2, 10, 15, 60, 'E'),
   ],
   fri: [
-    primer(),
-    p(HACK, 2, 12, 15, 60, 'A'), p(PALLOF, 2, 10, 10, 60, 'A'),
-    p(SA_PULLDOWN, 3, 10, 12, 45, 'B'), p(CHEST_PRESS, 3, 10, 12, 90, 'B'),
+    p(HACK, 2, 12, 15, 60, 'A'), pairedPrimer(),
+    p(SA_PULLDOWN, 3, 10, 12, 45, 'B'), p(LANDMINE, 3, 8, 12, 90, 'B'),
     p(LEG_EXT, 3, 12, 15, 30, 'C'), p(LEG_CURL, 2, 12, 15, 60, 'C'),
     p(LATERAL, 3, 12, 20, 30, 'D'), p(PUSHDOWN, 3, 12, 15, 60, 'D'),
-    p(PREACHER, 3, 10, 15, 30, 'E'), p(BODY_SAW, 3, 20, 30, 60, 'E'),
+    p(PREACHER, 2, 10, 15, 30, 'E'), p(BODY_SAW, 3, 20, 30, 60, 'E'),
+    p(HAMMER, 2, 10, 12, 60, 'F'),
   ],
   armor: armor(ROW_ER),
   home: HOME_PROGRAM,
 };
 
 // Shown at the top of a session and in the program editor.
-const WARMUP = 'Warm-up, about 7 min: 3 min bike or brisk walk · quadruped rock-back ×8 · 90/90 hip switches ×6/side · bird dog ×5/side · then the shoulder primer below.';
+const WARMUP = 'Warm-up, about 7 min: 3 min bike or brisk walk · quadruped rock-back ×8 · 90/90 hip switches ×6/side · bird dog ×5/side.';
+const PRIMER_PAIRED = 'The right-shoulder primer is A2: easy sets between the squats, before you press and pull.';
+const PRIMER_FIRST = 'Then the right-shoulder primer: easy sets, before you press and pull.';
 const PAIRS = 'Pairs (A1, A2): alternate their sets. The rest timer shows what’s next.';
 export const DAY_NOTES = {
-  mon: [WARMUP, PAIRS],
-  wed: [WARMUP, PAIRS],
-  fri: [WARMUP, PAIRS],
+  mon: [WARMUP, PRIMER_PAIRED, PAIRS],
+  wed: [`${WARMUP} ${PRIMER_FIRST}`, PAIRS],
+  fri: [WARMUP, PRIMER_PAIRED, PAIRS],
   armor: [PAIRS, 'Then 30–40 min Zone 2 cardio: incline walk or bike, at a pace where you can still talk.'],
 };
 
