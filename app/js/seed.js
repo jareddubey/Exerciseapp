@@ -38,11 +38,11 @@ const PREACHER = { id: 'preacher_machine', name: 'Preacher curl machine', increm
 const BODY_SAW = { id: 'body_saw', name: 'Body saw', increment: 0, bodyweight: true, measure: 'time', cue: 'Forearm plank, feet on sliders or a towel · rock 2–3 in back and forth · plain plank if the shoulder complains' };
 
 // ---------- armor ----------
-// Core, hips and shoulder control. The shoulder drills are light: stop a set
-// when the shoulder stops feeling centered, not at failure. Same at the gym
-// and at home except the row to ER (cable or band).
-const COPENHAGEN = { id: 'copenhagen_plank', name: 'Copenhagen plank', increment: 0, bodyweight: true, perSide: true, measure: 'time', cue: 'Short lever: knee on the bench · body straight · long lever once 30 s is easy' };
-const BIRD_DOG = { id: 'bird_dog', name: 'Bird dog', increment: 0, bodyweight: true, perSide: true, cue: '10-s hold each rep · brace, no sagging or hip rotation' };
+// Recovery, mobility and motor control: core, hips and shoulder control, no
+// strength work. The shoulder drills are light: stop a set when the shoulder
+// stops feeling centered, not at failure. Same at the gym and at home except
+// the row to ER (cable or band).
+const BIRD_DOG = { id: 'bird_dog', name: 'Bird dog', increment: 0, bodyweight: true, perSide: true, cue: '5-s hold each rep · brace, no sagging or hip rotation' };
 const SIDE_PLANK = { id: 'side_plank', name: 'Side plank', increment: 0, bodyweight: true, perSide: true, measure: 'time', cue: 'Straight line, hips up · on your knees if the right shoulder complains' };
 // Two weeks in place of the dead bug while the left adductor and hip flexor
 // grip in 90-90; swap the dead bug back in (its history is kept) once wk 2 is clean.
@@ -50,9 +50,7 @@ const SUPPORTED_DEAD_BUG = { id: 'supported_dead_bug', name: 'Supported dead bug
 // Horizontal abduction and flexion only: ER is easy and the row to ER covers it,
 // and a straight arm past 1 lb aches at the front of the shoulder.
 const CUFF = { id: 'side_lying_cuff_supersets', name: 'Right-shoulder superset', increment: 0.5, cue: 'Side-lying, straight arm, 1 lb: horizontal abduction, stop at the body line → flexion, stop short of overhead, before any pinch · 2-s pause up, 3-s down · end the set when form slips (shrug, trunk rolls back, elbow bends)' };
-const CARRY = { id: 'suitcase_carry', name: 'Suitcase carry', increment: 5, perHand: true, perSide: true, measure: 'distance', cue: 'One DB at your side · stand tall, don’t lean · slow steps' };
 const FLY = { id: 'supine_db_fly', name: 'Supine DB fly (PT)', increment: 1, perHand: true, cue: 'Super light · slow lowering, only as wide as the shoulder stays centered · control drill, not chest training' };
-const ADDUCTOR_RB = { id: 'adductor_rock_back', name: 'Adductor rock-back', increment: 0, bodyweight: true, perSide: true, cue: 'Hands and knees, one leg out to the side · rock back with the spine still · stop before the back rounds' };
 const HIP_FLEXOR = { id: 'hip_flexor_stretch', name: 'Half-kneeling hip flexor stretch', increment: 0, bodyweight: true, perSide: true, measure: 'time', cue: 'Squeeze the back-leg glute · ribs down · extra set on the left' };
 
 // Daily right posterior capsule stretch, alternating: sleeper Mon/Wed/Fri,
@@ -67,12 +65,10 @@ const primer = () => ({ ...CUFF, sets: 2, repMin: 8, repMax: 10, restSec: 30 });
 const pairedPrimer = () => p(CUFF, 2, 8, 10, 60, 'A');
 
 const armor = (rowEr) => [
-  p(COPENHAGEN, 3, 15, 30, 30, 'A'), p(BIRD_DOG, 3, 6, 6, 45, 'A'),
-  p(SIDE_PLANK, 3, 30, 60, 30, 'B'), p(SUPPORTED_DEAD_BUG, 3, 5, 6, 45, 'B'),
-  p(CUFF, 3, 8, 15, 30, 'C'), p(CARRY, 3, 30, 40, 60, 'C'),
-  p(FLY, 2, 12, 15, 30, 'D'), p(ADDUCTOR_RB, 2, 8, 8, 30, 'D'),
-  p(rowEr, 2, 12, 15, 30, 'E'), p(HIP_FLEXOR, 2, 30, 30, 30, 'E'),
-  p(CROSS_BODY, 3, 30, 30, 15, 'F'),
+  p(SUPPORTED_DEAD_BUG, 3, 5, 6, 20, 'A'), p(BIRD_DOG, 2, 6, 6, 30, 'A'),
+  p(CUFF, 3, 8, 15, 20, 'B'), p(HIP_FLEXOR, 2, 30, 30, 30, 'B'),
+  p(FLY, 2, 12, 15, 20, 'C'), p(SIDE_PLANK, 2, 20, 40, 30, 'C'),
+  p(rowEr, 2, 12, 15, 20, 'D'), p(CROSS_BODY, 3, 30, 30, 15, 'D'),
 ];
 
 // ---------- home: dumbbells, bands, a pull-up bar and an incline bench ----------
@@ -162,7 +158,7 @@ export const DAY_NOTES = {
   mon: [WARMUP, PRIMER_PAIRED, PAIRS],
   wed: [`${WARMUP} ${PRIMER_FIRST}`, PAIRS],
   fri: [WARMUP, PRIMER_PAIRED, PAIRS],
-  armor: [ARMOR_OPENER, CUFF_GOALS, PAIRS, 'Then 30–40 min Zone 2 cardio: incline walk or bike, at a pace where you can still talk.'],
+  armor: [ARMOR_OPENER, CUFF_GOALS, PAIRS, 'Then 30–40 min Zone 2 cardio: a long dog walk counts, at a pace where you can still talk.'],
 };
 
 export const DEFAULT_SETTINGS = {

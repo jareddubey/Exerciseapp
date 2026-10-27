@@ -239,11 +239,16 @@ export function capsuleStretchUpdate(program) {
     if (list.some((x) => STRETCH_IDS.includes(x.id))) continue;
     const seedEx = programList(SEED_PROGRAM, day, loc).find((x) => STRETCH_IDS.includes(x.id));
     const ex = { ...seedEx };
+    const next = [...list];
     const last = list.at(-1)?.group;
     if (!last) delete ex.group;
-    else if (list.filter((x) => x.group === last).length === 1) ex.group = last;
-    else ex.group = String.fromCharCode(last.charCodeAt(0) + 1);
-    p = withProgramList(p, day, loc, [...list, ex]);
+    else if (list.filter((x) => x.group === last).length === 1) {
+      // the lone finisher gets a partner: its rest becomes a pair rest
+      ex.group = last;
+      const seedLast = programList(SEED_PROGRAM, day, loc).find((x) => x.id === list.at(-1).id && x.group === last);
+      if (seedLast) next[next.length - 1] = { ...list.at(-1), restSec: seedLast.restSec };
+    } else ex.group = String.fromCharCode(last.charCodeAt(0) + 1);
+    p = withProgramList(p, day, loc, [...next, ex]);
     changed = true;
   }
   if (!changed) return { program, changes: [] };
@@ -251,6 +256,41 @@ export function capsuleStretchUpdate(program) {
     program: p,
     changes: ['Daily posterior capsule stretch, last in the session: sleeper stretch Mon/Wed/Fri, cross-body stretch on Armor (Tue/Thu), 3 × 30 s'],
   };
+}
+
+// Armor as the capsule-stretch update left it.
+const STRENGTH_ARMOR = ['copenhagen_plank', 'bird_dog', 'side_plank', 'supported_dead_bug', 'side_lying_cuff_supersets', 'suitcase_carry',
+  'supine_db_fly', 'adductor_rock_back', '*row_er', 'hip_flexor_stretch', 'cross_body_stretch'];
+const OLD_BIRD_DOG_CUE = '10-s hold each rep · brace, no sagging or hip rotation';
+
+/**
+ * Armor for recovery (Oct 2026): recovery, mobility and motor control, about
+ * 50 min instead of 75. Copenhagen plank and suitcase carry come out, the
+ * adductor rock-back stays in the opener only, bird dog and side plank drop to
+ * 2 sets (bird dog 5-s holds), and rests shorten. Only an Armor still in its
+ * shipped form changes; exercises the user already has keep their name, cue
+ * and load.
+ */
+export function recoveryArmorUpdate(program) {
+  let p = program;
+  const changes = [];
+  for (const loc of ['gym', 'home']) {
+    if (loc === 'home' && !p.home) continue;
+    const armor = programList(p, 'armor', loc);
+    const shipped = armor.length === STRENGTH_ARMOR.length
+      && armor.every((x, i) => (STRENGTH_ARMOR[i] === '*row_er' ? x.id.endsWith('row_er') : x.id === STRENGTH_ARMOR[i]));
+    if (!shipped) continue;
+    const next = programList(SEED_PROGRAM, 'armor', loc).map((ex) => {
+      const mine = armor.find((x) => x.id === ex.id);
+      if (!mine) return ex;
+      const out = { ...mine, ...Object.fromEntries(SLOT_KEYS.map((k) => [k, ex[k]])) };
+      if (out.id === 'bird_dog' && out.cue === OLD_BIRD_DOG_CUE) out.cue = ex.cue;
+      return out;
+    });
+    p = withProgramList(p, 'armor', loc, next);
+    changes.push(`${loc === 'home' ? 'Home ' : ''}Armor: recovery, mobility and motor control, about 50 min. Copenhagen plank, suitcase carry and the adductor rock-back sets come out (rock-back stays in the opener); bird dog 2 × 6 with 5-s holds, side plank 2 × 20–40 s, shorter rests`);
+  }
+  return { program: p, changes };
 }
 
 export const PROGRAM_UPDATES = [
@@ -261,4 +301,5 @@ export const PROGRAM_UPDATES = [
   { id: 'supported-dead-bug-2026-10', title: 'Supported dead bug on Armor', apply: supportedDeadBugUpdate },
   { id: 'cuff-dose-2026-10', title: 'Right-shoulder superset dose', apply: cuffDoseUpdate },
   { id: 'capsule-stretch-2026-10', title: 'Daily posterior capsule stretch', apply: capsuleStretchUpdate },
+  { id: 'recovery-armor-2026-10', title: 'Armor for recovery', apply: recoveryArmorUpdate },
 ];

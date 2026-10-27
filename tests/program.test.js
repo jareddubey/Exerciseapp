@@ -5,7 +5,7 @@ import {
   suggestWeight, prefillWeights, lastFor, formatSets, formatTarget, convertProgramUnits, noIncrement, pairLabels, nextUp,
   isDayProgram, slotName, dayLabel, dayTitle, DAY,
 } from '../app/js/logic.js';
-import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, capsuleStretchUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
+import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, capsuleStretchUpdate, recoveryArmorUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
 import { SEED_PROGRAM, HOME_PROGRAM, DAY_NOTES } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday
@@ -78,7 +78,6 @@ test('seed: keeps ids with history and avoids what the shoulder and back dislike
   for (const id of ['hip_thrust', 'chin_up', 'db_curl', 'flat_press']) assert.ok(!byIdAnywhere(id), id);
   assert.equal(find('wed', 'push_up').notch, true);
   assert.equal(find('armor', 'side_plank').measure, 'time');
-  assert.equal(find('armor', 'suitcase_carry').measure, 'distance');
 });
 const byIdAnywhere = (id) => allProgramExercises(SEED_PROGRAM).some((x) => x.id === id);
 
@@ -151,8 +150,8 @@ test('withProgramList fills missing home days', () => {
 
 // ---------- holds, carries, notch ----------
 test('timed holds, carries and notch format and progress', () => {
-  const plank = find('armor', 'side_plank'); // 3 × 30–60 s/side
-  const carry = find('armor', 'suitcase_carry'); // 3 × 30–40 m/side, +5 lb ea
+  const plank = { ...find('armor', 'side_plank'), sets: 3, repMin: 30, repMax: 60 };
+  const carry = { id: 'suitcase_carry', name: 'Suitcase carry', increment: 5, perHand: true, perSide: true, measure: 'distance', sets: 3, repMin: 30, repMax: 40, restSec: 60 };
   const pushUp = find('wed', 'push_up'); // notch, 3 × 8–15
   assert.equal(formatTarget(plank), '3 × 30–60 s/side');
   assert.equal(formatTarget(carry), '3 × 30–40 m/side');
@@ -285,7 +284,7 @@ test('control work update: moves shoulder drills to Armor on a program in its sh
   }
   const cuff = program.armor.find((x) => x.id === 'side_lying_cuff_supersets');
   assert.equal(cuff.cue, 'mine', 'keeps the user\'s exercise');
-  assert.equal(cuff.group, 'C', 'takes the new pair');
+  assert.equal(cuff.group, 'B', 'takes the new pair');
   assert.equal(program.armor.find((x) => x.id === 'supine_db_fly').increment, 1.25, 'kg increment');
   assert.equal(program.wed.find((x) => x.id === 'reverse_pec_deck').group, 'C');
   assert.deepEqual(controlWorkUpdate(program).changes, [], 'idempotent');
@@ -332,7 +331,7 @@ test('pairing update: re-pairs lifting days still in their shipped form', () => 
 });
 
 test('supported dead bug update: takes the dead bug\'s place on Armor, gym and home', () => {
-  const deadBug = { id: 'dead_bug', name: 'Dead bug', sets: 3, repMin: 8, repMax: 8, restSec: 45, increment: 0, group: 'B', cue: 'mine' };
+  const deadBug = { id: 'dead_bug', name: 'Dead bug', sets: 3, repMin: 8, repMax: 8, restSec: 20, increment: 0, group: 'A', cue: 'mine' };
   let old = { ...structuredClone(SEED_PROGRAM), unit: 'kg' };
   for (const loc of ['gym', 'home']) {
     old = withProgramList(old, 'armor', loc, programList(old, 'armor', loc).map((x) => (x.id === 'supported_dead_bug' ? deadBug : x)));
@@ -352,7 +351,9 @@ test('capsule stretch update: sleeper on lifting days, cross-body on Armor, last
   const stretches = ['sleeper_stretch', 'cross_body_stretch'];
   let old = { ...structuredClone(SEED_PROGRAM), unit: 'lb' };
   for (const [loc, day] of SLOTS) old = withProgramList(old, day, loc, programList(old, day, loc).filter((x) => !stretches.includes(x.id)));
+  old = withProgramList(old, 'wed', 'gym', programList(old, 'wed', 'gym').map((x, i, l) => (i === l.length - 1 ? { ...x, restSec: 60 } : x)));
   const { program, changes } = capsuleStretchUpdate(old);
+  assert.equal(program.wed.at(-2).restSec, 30, 'the lone curl\'s rest becomes a pair rest');
   assert.equal(changes.length, 1);
   for (const [loc, day] of SLOTS) {
     const got = programList(program, day, loc);
@@ -363,6 +364,31 @@ test('capsule stretch update: sleeper on lifting days, cross-body on Armor, last
   assert.deepEqual(capsuleStretchUpdate(program).changes, [], 'idempotent');
   assert.deepEqual(capsuleStretchUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
   assert.equal(formatTarget(find('mon', 'sleeper_stretch')), '3 × 30 s');
+});
+
+test('recovery Armor update: about 50 min of motor control, keeps the user\'s exercises', () => {
+  const ex = (id, extra = {}) => ({ id, name: id, sets: 3, repMin: 8, repMax: 12, restSec: 45, increment: 0, group: 'Z', cue: 'mine', ...extra });
+  const shipped = (rowEr) => ['copenhagen_plank', 'bird_dog', 'side_plank', 'supported_dead_bug', 'side_lying_cuff_supersets', 'suitcase_carry',
+    'supine_db_fly', 'adductor_rock_back', rowEr, 'hip_flexor_stretch', 'cross_body_stretch']
+    .map((id) => ex(id, id === 'bird_dog' ? { cue: '10-s hold each rep · brace, no sagging or hip rotation' } : {}));
+  let old = { ...structuredClone(SEED_PROGRAM), unit: 'lb' };
+  old = withProgramList(old, 'armor', 'gym', shipped('cable_row_er'));
+  old = withProgramList(old, 'armor', 'home', shipped('band_row_er'));
+  const { program, changes } = recoveryArmorUpdate(old);
+  assert.equal(changes.length, 2);
+  for (const loc of ['gym', 'home']) {
+    const got = programList(program, 'armor', loc);
+    const want = programList(SEED_PROGRAM, 'armor', loc);
+    assert.deepEqual(got.map((x) => [x.id, x.sets, x.repMin, x.repMax, x.restSec, x.group]), want.map((x) => [x.id, x.sets, x.repMin, x.repMax, x.restSec, x.group]), loc);
+  }
+  assert.equal(program.armor.find((x) => x.id === 'side_lying_cuff_supersets').cue, 'mine', 'keeps the user\'s exercise');
+  assert.equal(program.armor.find((x) => x.id === 'bird_dog').cue, find('armor', 'bird_dog').cue, 'old default cue updated');
+  assert.deepEqual(recoveryArmorUpdate(program).changes, [], 'idempotent');
+  assert.deepEqual(recoveryArmorUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
+  const edited = withProgramList(old, 'armor', 'gym', shipped('cable_row_er').slice(1));
+  assert.equal(recoveryArmorUpdate(edited).program.armor.length, 10, 'an Armor the user changed is left alone');
+  for (const id of ['copenhagen_plank', 'suitcase_carry', 'adductor_rock_back']) assert.ok(!SEED_PROGRAM.armor.some((x) => x.id === id), id);
+  assert.match(DAY_NOTES.armor.at(-1), /dog walk/);
 });
 
 test('updates in order take a first-shipped 3-day program to the current seed', () => {
