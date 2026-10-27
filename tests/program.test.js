@@ -5,7 +5,7 @@ import {
   suggestWeight, prefillWeights, lastFor, formatSets, formatTarget, convertProgramUnits, noIncrement, pairLabels, nextUp,
   isDayProgram, slotName, dayLabel, dayTitle, DAY,
 } from '../app/js/logic.js';
-import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
+import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
 import { SEED_PROGRAM, HOME_PROGRAM, DAY_NOTES } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday
@@ -72,7 +72,7 @@ test('seed: a shared id is the same exercise everywhere; only the prescription d
 
 test('seed: keeps ids with history and avoids what the shoulder and back dislike', () => {
   for (const id of ['hack_squat', 'leg_press', 'leg_curl', 'leg_ext', 'cs_row', 'lat_pull_down', 'push_up', 'db_lateral_raise',
-    'standing_bicep_curl', 'hammer_curl', 'preacher_machine', 'tri_pushdown', 'pallof', 'side_lying_cuff_supersets', 'dead_bug', 'chest_press']) {
+    'standing_bicep_curl', 'hammer_curl', 'preacher_machine', 'tri_pushdown', 'pallof', 'side_lying_cuff_supersets', 'chest_press']) {
     assert.ok(byIdAnywhere(id), id);
   }
   for (const id of ['hip_thrust', 'chin_up', 'db_curl', 'flat_press']) assert.ok(!byIdAnywhere(id), id);
@@ -301,6 +301,22 @@ test('pairing update: re-pairs lifting days still in their shipped form', () => 
   // a day the user changed is left alone
   const edited = withProgramList(old, 'mon', 'gym', shipped.gym.mon.slice(1).map(mk));
   assert.equal(pairingUpdate(edited).program.mon.length, 8);
+});
+
+test('supported dead bug update: takes the dead bug\'s place on Armor, gym and home', () => {
+  const deadBug = { id: 'dead_bug', name: 'Dead bug', sets: 3, repMin: 8, repMax: 8, restSec: 45, increment: 0, group: 'B', cue: 'mine' };
+  let old = { ...structuredClone(SEED_PROGRAM), unit: 'kg' };
+  for (const loc of ['gym', 'home']) {
+    old = withProgramList(old, 'armor', loc, programList(old, 'armor', loc).map((x) => (x.id === 'supported_dead_bug' ? deadBug : x)));
+  }
+  const { program, changes } = supportedDeadBugUpdate(old);
+  assert.equal(changes.length, 2);
+  for (const loc of ['gym', 'home']) {
+    assert.deepEqual(programList(program, 'armor', loc), programList(SEED_PROGRAM, 'armor', loc), loc);
+  }
+  assert.deepEqual(supportedDeadBugUpdate(program).changes, [], 'idempotent');
+  assert.deepEqual(supportedDeadBugUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
+  assert.match(DAY_NOTES.armor[0], /90-90 breathing/);
 });
 
 test('updates in order take a first-shipped 3-day program to the current seed', () => {

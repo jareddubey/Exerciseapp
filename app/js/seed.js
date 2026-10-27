@@ -44,7 +44,9 @@ const BODY_SAW = { id: 'body_saw', name: 'Body saw', increment: 0, bodyweight: t
 const COPENHAGEN = { id: 'copenhagen_plank', name: 'Copenhagen plank', increment: 0, bodyweight: true, perSide: true, measure: 'time', cue: 'Short lever: knee on the bench · body straight · long lever once 30 s is easy' };
 const BIRD_DOG = { id: 'bird_dog', name: 'Bird dog', increment: 0, bodyweight: true, perSide: true, cue: '10-s hold each rep · brace, no sagging or hip rotation' };
 const SIDE_PLANK = { id: 'side_plank', name: 'Side plank', increment: 0, bodyweight: true, perSide: true, measure: 'time', cue: 'Straight line, hips up · on your knees if the right shoulder complains' };
-const DEAD_BUG = { id: 'dead_bug', name: 'Dead bug', increment: 0, bodyweight: true, perSide: true, cue: "Brace, ribs down, keep natural low-back curve (don't press flat) · slow · arms only as far overhead as is comfortable" };
+// Two weeks in place of the dead bug while the left adductor and hip flexor
+// grip in 90-90; swap the dead bug back in (its history is kept) once wk 2 is clean.
+const SUPPORTED_DEAD_BUG = { id: 'supported_dead_bug', name: 'Supported dead bug', increment: 0, bodyweight: true, perSide: true, cue: 'Wk 1: calves on a bench, arm reaches only, on a long exhale → once clean, hands press into knees, 5-s holds · Wk 2: one hand presses its knee while the other leg reaches low, clean side first · end the set when the left adductor grips' };
 const CUFF = { id: 'side_lying_cuff_supersets', name: 'Right-shoulder superset', increment: 1, cue: 'Side-lying, straight arm: ER → horizontal abduction → flexion · progress reps, then weight' };
 const CARRY = { id: 'suitcase_carry', name: 'Suitcase carry', increment: 5, perHand: true, perSide: true, measure: 'distance', cue: 'One DB at your side · stand tall, don’t lean · slow steps' };
 const FLY = { id: 'supine_db_fly', name: 'Supine DB fly (PT)', increment: 1, perHand: true, cue: 'Super light · slow lowering, only as wide as the shoulder stays centered · control drill, not chest training' };
@@ -58,7 +60,7 @@ const pairedPrimer = () => p(CUFF, 2, 10, 12, 60, 'A');
 
 const armor = (rowEr) => [
   p(COPENHAGEN, 3, 15, 30, 30, 'A'), p(BIRD_DOG, 3, 6, 6, 45, 'A'),
-  p(SIDE_PLANK, 3, 30, 60, 30, 'B'), p(DEAD_BUG, 3, 8, 8, 45, 'B'),
+  p(SIDE_PLANK, 3, 30, 60, 30, 'B'), p(SUPPORTED_DEAD_BUG, 3, 5, 6, 45, 'B'),
   p(CUFF, 3, 12, 15, 30, 'C'), p(CARRY, 3, 30, 40, 60, 'C'),
   p(FLY, 2, 12, 15, 30, 'D'), p(ADDUCTOR_RB, 2, 8, 8, 30, 'D'),
   p(rowEr, 2, 12, 15, 30, 'E'), p(HIP_FLEXOR, 2, 30, 30, 30, 'E'),
@@ -139,12 +141,13 @@ export const SEED_PROGRAM = {
 const WARMUP = 'Warm-up, about 7 min: 3 min bike or brisk walk · quadruped rock-back ×8 · 90/90 hip switches ×6/side · bird dog ×5/side.';
 const PRIMER_PAIRED = 'The right-shoulder primer is A2: easy sets between the squats, before you press and pull.';
 const PRIMER_FIRST = 'Then the right-shoulder primer: easy sets, before you press and pull.';
+const ARMOR_OPENER = 'Opener, about 3 min: 90-90 breathing, feet on the wall, heels pressing lightly (5 long exhales with a 2–3 s pause, twice) · adductor rock-back ×8/side. A hand on the left inner thigh should feel it stay quiet.';
 const PAIRS = 'Pairs (A1, A2): alternate their sets. The rest timer shows what’s next.';
 export const DAY_NOTES = {
   mon: [WARMUP, PRIMER_PAIRED, PAIRS],
   wed: [`${WARMUP} ${PRIMER_FIRST}`, PAIRS],
   fri: [WARMUP, PRIMER_PAIRED, PAIRS],
-  armor: [PAIRS, 'Then 30–40 min Zone 2 cardio: incline walk or bike, at a pace where you can still talk.'],
+  armor: [ARMOR_OPENER, PAIRS, 'Then 30–40 min Zone 2 cardio: incline walk or bike, at a pace where you can still talk.'],
 };
 
 export const DEFAULT_SETTINGS = {

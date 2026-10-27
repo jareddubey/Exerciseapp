@@ -166,9 +166,32 @@ export function pairingUpdate(program) {
   return { program: p, changes };
 }
 
+/**
+ * Supported dead bug (Oct 2026): the left adductor and hip flexor grip when the
+ * legs hold 90-90, so Armor's dead bug becomes a two-week supported version
+ * (legs on a bench, then hand-to-knee press). It takes the dead bug's place
+ * and pair; the dead bug's history stays, ready to swap back in.
+ */
+export function supportedDeadBugUpdate(program) {
+  let p = program;
+  const changes = [];
+  for (const loc of ['gym', 'home']) {
+    const list = programList(p, 'armor', loc);
+    const i = list.findIndex((x) => x.id === 'dead_bug');
+    if (i < 0 || list.some((x) => x.id === 'supported_dead_bug')) continue;
+    const seedEx = programList(SEED_PROGRAM, 'armor', loc).find((x) => x.id === 'supported_dead_bug');
+    const next = [...list];
+    next[i] = { ...seedEx, group: list[i].group };
+    p = withProgramList(p, 'armor', loc, next);
+    changes.push(`${loc === 'home' ? 'Home ' : ''}Armor: supported dead bug replaces the dead bug for 2 weeks (wk 1 legs on a bench, wk 2 hand-to-knee press)`);
+  }
+  return { program: p, changes };
+}
+
 export const PROGRAM_UPDATES = [
   { id: 'full-body-3day-2026-10', title: '3-day full body + Armor', apply: fullBodyUpdate, undo: false },
   { id: 'cuff-straight-arm-2026-10', title: 'Shoulder superset cue', apply: cuffCueUpdate },
   { id: 'control-work-armor-2026-10', title: 'Shoulder control work on Armor', apply: controlWorkUpdate },
   { id: 'pairing-curls-2026-10', title: 'Pairs by room, landmine press, curls 3×/week', apply: pairingUpdate },
+  { id: 'supported-dead-bug-2026-10', title: 'Supported dead bug on Armor', apply: supportedDeadBugUpdate },
 ];
