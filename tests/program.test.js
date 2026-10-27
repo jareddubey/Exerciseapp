@@ -5,7 +5,7 @@ import {
   suggestWeight, prefillWeights, lastFor, formatSets, formatTarget, convertProgramUnits, noIncrement, pairLabels, nextUp,
   isDayProgram, slotName, dayLabel, dayTitle, DAY,
 } from '../app/js/logic.js';
-import { fullBodyUpdate, cuffCueUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
+import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
 import { SEED_PROGRAM, HOME_PROGRAM, DAY_NOTES } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday
@@ -33,12 +33,16 @@ test('seed: every day is well formed and made of pairs', () => {
       assert.ok(ex.id && ex.name && ex.sets >= 1 && ex.repMin <= ex.repMax && ex.restSec > 0, ex.id);
       if (noIncrement(ex)) assert.equal(ex.increment, 0, ex.id);
     }
+    // Lifting days open with the unpaired shoulder primer; everything else is in pairs.
+    const paired = day === 'armor' ? list : list.slice(1);
+    if (day !== 'armor') assert.deepEqual([list[0].id, list[0].group], ['side_lying_cuff_supersets', undefined], `${loc} ${day} primer`);
     const sizes = {};
-    for (const ex of list) sizes[ex.group] = (sizes[ex.group] || 0) + 1;
+    for (const ex of paired) sizes[ex.group] = (sizes[ex.group] || 0) + 1;
     assert.ok(Object.values(sizes).every((k) => k === 2), `${loc} ${day}: every group is a pair`);
-    assert.ok(!pairLabels(list).includes(null));
+    assert.ok(!pairLabels(paired).includes(null));
   }
-  assert.deepEqual(SEED_PROGRAM.armor, HOME_PROGRAM.armor, 'Armor is the same at home');
+  const noRowEr = (list) => list.filter((x) => !x.id.endsWith('row_er'));
+  assert.deepEqual(noRowEr(SEED_PROGRAM.armor), noRowEr(HOME_PROGRAM.armor), 'Armor is the same at home but for the row to ER');
   assert.ok(DAYS.every((d) => DAY_NOTES[d].length));
 });
 
@@ -119,8 +123,8 @@ test('updateEverywhere: name and load shared, prescription per day', () => {
   assert.equal(find('mon', 'hack_squat').sets, 3, 'not mutated');
   // without a slot, every day keeps its own prescription
   const q = updateEverywhere(SEED_PROGRAM, 'db_lateral_raise', { ...find('mon', 'db_lateral_raise'), cue: 'x', sets: 9 });
-  assert.equal(programList(q, 'armor', 'home').find((x) => x.id === 'db_lateral_raise').sets, 2);
-  assert.equal(programList(q, 'armor', 'home').find((x) => x.id === 'db_lateral_raise').cue, 'x');
+  assert.equal(programList(q, 'fri', 'home').find((x) => x.id === 'db_lateral_raise').sets, 3);
+  assert.equal(programList(q, 'fri', 'home').find((x) => x.id === 'db_lateral_raise').cue, 'x');
   // an exercise without a pair doesn't pick one up from the edited day
   const r = updateEverywhere({ mon: [{ id: 'x', group: 'A' }], wed: [{ id: 'x' }], fri: [], armor: [] }, 'x', { id: 'x', group: 'A', name: 'X' }, ['gym', 'mon']);
   assert.equal('group' in r.wed[0], false);
@@ -211,4 +215,38 @@ test('cuff cue update: changes the old default cue on every day, keeps a user ed
   const mine = updateEverywhere(SEED_PROGRAM, 'side_lying_cuff_supersets', { ...find('armor', 'side_lying_cuff_supersets'), cue: 'my cue' });
   assert.deepEqual(cuffCueUpdate(mine).changes, []);
   assert.match(find('armor', 'side_lying_cuff_supersets').cue, /straight arm/);
+});
+
+test('control work update: moves shoulder drills to Armor on a program in its shipped form', () => {
+  const ex = (id) => ({ id, name: id, sets: 2, repMin: 12, repMax: 15, restSec: 30, increment: 0, group: 'X', cue: 'mine' });
+  const oldArmor = ['copenhagen_plank', 'bird_dog', 'side_plank', 'dead_bug', 'side_lying_cuff_supersets', 'suitcase_carry',
+    'push_up_plus', 'db_lateral_raise', 'adductor_rock_back', 'hip_flexor_stretch'].map(ex);
+  const swapWed = (list, from, to) => list.map((x) => (x.id === to ? { ...ex(from), group: x.group } : x));
+  let old = { ...structuredClone(SEED_PROGRAM), unit: 'kg' };
+  old = withProgramList(old, 'armor', 'gym', oldArmor);
+  old = withProgramList(old, 'armor', 'home', oldArmor);
+  old = withProgramList(old, 'wed', 'gym', swapWed(old.wed, 'cable_row_er', 'reverse_pec_deck'));
+  old = withProgramList(old, 'wed', 'home', swapWed(old.home.wed, 'band_row_er', 'band_pull_apart'));
+  for (const loc of ['gym', 'home']) {
+    for (const day of ['mon', 'wed', 'fri']) old = withProgramList(old, day, loc, programList(old, day, loc).slice(1));
+  }
+  const { program, changes } = controlWorkUpdate(old);
+  assert.equal(changes.length, 6);
+  assert.ok(changes.includes('Mon, Wed, Fri: right-shoulder superset as an easy primer at the start (2 sets)'));
+  const primer = program.fri[0];
+  assert.deepEqual([primer.id, primer.sets, primer.cue, 'group' in primer], ['side_lying_cuff_supersets', 2, 'mine', false]);
+  for (const loc of ['gym', 'home']) {
+    for (const day of DAYS) {
+      assert.deepEqual(programList(program, day, loc).map((x) => x.id), programList(SEED_PROGRAM, day, loc).map((x) => x.id), `${loc} ${day}`);
+    }
+  }
+  const cuff = program.armor.find((x) => x.id === 'side_lying_cuff_supersets');
+  assert.equal(cuff.cue, 'mine', 'keeps the user\'s exercise');
+  assert.equal(cuff.group, 'C', 'takes the new pair');
+  assert.equal(program.armor.find((x) => x.id === 'supine_db_fly').increment, 1.25, 'kg increment');
+  assert.equal(program.wed.find((x) => x.id === 'reverse_pec_deck').group, 'C');
+  assert.deepEqual(controlWorkUpdate(program).changes, [], 'idempotent');
+  assert.deepEqual(controlWorkUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
+  const edited = withProgramList(old, 'armor', 'gym', oldArmor.slice(1));
+  assert.equal(controlWorkUpdate(edited).program.armor.length, 9, 'an Armor the user changed is left alone');
 });
