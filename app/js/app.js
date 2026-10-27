@@ -144,11 +144,11 @@ const rest = (() => {
       if (audio.state === 'suspended') audio.resume();
     } catch { audio = null; }
   }
-  function beep() {
+  function beep(times = 3) {
     if (!audio || !state.settings?.beep) return;
     try {
       const t0 = audio.currentTime;
-      [0, 0.25, 0.5].forEach((d) => {
+      [0, 0.25, 0.5].slice(0, times).forEach((d) => {
         const o = audio.createOscillator();
         const g = audio.createGain();
         o.frequency.value = 880;
@@ -236,7 +236,92 @@ const rest = (() => {
     render();
   }
   function sync() { if (get()) loop(); else render(); }
-  return { start, skip, sync, unlockAudio, position };
+  return { start, skip, sync, unlockAudio, position, beep };
+})();
+
+// ---------------------------------------------------------------- hold stopwatch
+
+// A 60-second analog stopwatch in the session header for timing holds. Tap to
+// start, tap to stop, tap again to reset. One beep at 30 s; at 60 s it beeps,
+// vibrates and stops.
+const stopwatch = (() => {
+  const R = 19;
+  const C = 2 * Math.PI * R;
+  let startAt = null; // running since
+  let shown = 0; // seconds on the dial while stopped
+  let beeped30 = false;
+  let raf = 0;
+  let lastSec = -1;
+  const svg = (tag, attrs) => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    return el;
+  };
+  const arc = svg('circle', { cx: 22, cy: 22, r: R, class: 'sw-arc', transform: 'rotate(-90 22 22)', 'stroke-dasharray': `0 ${C}` });
+  const hand = svg('line', { x1: 22, y1: 22, x2: 22, y2: 6, class: 'sw-hand' });
+  const num = svg('text', { x: 22, y: 34, class: 'sw-num' });
+  const face = svg('svg', { viewBox: '0 0 44 44', 'aria-hidden': 'true' });
+  face.append(svg('circle', { cx: 22, cy: 22, r: R, class: 'sw-face' }), arc);
+  for (let i = 0; i < 12; i++) {
+    const a = (i * 30 * Math.PI) / 180;
+    const r0 = i % 3 ? 16 : 14; // longer ticks at 0, 15, 30, 45 s
+    face.append(svg('line', { x1: 22 + r0 * Math.sin(a), y1: 22 - r0 * Math.cos(a), x2: 22 + 18 * Math.sin(a), y2: 22 - 18 * Math.cos(a), class: 'sw-tick' }));
+  }
+  face.append(num, hand, svg('circle', { cx: 22, cy: 22, r: 2, class: 'sw-hub' }));
+  const el = h('button', { class: 'stopwatch', type: 'button', onclick: tap }, face);
+
+  const elapsed = () => (startAt == null ? shown : Math.min(60, (Date.now() - startAt) / 1000));
+  function paint() {
+    const sec = elapsed();
+    hand.setAttribute('transform', `rotate(${sec * 6} 22 22)`);
+    arc.setAttribute('stroke-dasharray', `${(C * sec) / 60} ${C}`);
+    const whole = Math.floor(sec);
+    if (whole === lastSec) return;
+    lastSec = whole;
+    num.textContent = whole || '';
+    const what = startAt != null ? 'running, tap to stop' : shown ? 'stopped, tap to reset' : 'tap to start';
+    el.setAttribute('aria-label', `Hold stopwatch: ${whole} s, ${what}`);
+  }
+  function frame() {
+    paint();
+    if (startAt == null) return;
+    const ms = Date.now() - startAt;
+    // No sound when the app was in the background past the mark.
+    if (ms >= 30_000 && !beeped30) {
+      beeped30 = true;
+      if (ms < 32_000) { rest.beep(1); navigator.vibrate?.(150); }
+    }
+    if (ms >= 60_000) {
+      shown = 60;
+      startAt = null;
+      if (ms < 62_000) { rest.beep(3); navigator.vibrate?.([300, 120, 300]); }
+      el.classList.remove('running');
+      el.classList.add('done');
+      lastSec = -1;
+      paint();
+      return;
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  function tap() {
+    rest.unlockAudio();
+    cancelAnimationFrame(raf);
+    el.classList.remove('done');
+    if (startAt != null) {
+      shown = elapsed();
+      startAt = null;
+    } else if (shown) {
+      shown = 0;
+    } else {
+      startAt = Date.now();
+      beeped30 = false;
+    }
+    el.classList.toggle('running', startAt != null);
+    lastSec = -1;
+    frame();
+  }
+  paint();
+  return { el };
 })();
 
 // ---------------------------------------------------------------- scroll memory
@@ -422,7 +507,8 @@ function viewSession(session) {
 
   const header = h('header', { class: 'top' },
     h('a', { class: 'icon-btn', href: live ? '#/' : '#/history', 'aria-label': 'Back' }, '‹'),
-    h('h1', null, `${dayTitle(session.day)}${locationOf(session) === 'home' ? ' · Home' : ''}`, progress));
+    h('h1', null, `${dayTitle(session.day)}${locationOf(session) === 'home' ? ' · Home' : ''}`, progress),
+    live ? stopwatch.el : null);
 
   const root = h('div', { class: 'session' }, header);
   if (live && DAY_NOTES[session.day]) {

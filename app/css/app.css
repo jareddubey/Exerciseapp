@@ -239,6 +239,20 @@ h3 { font-size: 15px; margin: 20px 0 8px; color: var(--muted); text-transform: u
 .num, .note, .field { scroll-margin-top: calc(var(--hdr-h, 64px) + var(--rest-h, 0px) + 8px); }
 @keyframes flash { 50% { background: var(--flash); } }
 
+/* ---------- hold stopwatch (session header) ---------- */
+.stopwatch { flex: none; width: var(--tap); height: var(--tap); padding: 2px; margin-right: -4px; border: 0; background: none; border-radius: 50%; }
+.stopwatch svg { display: block; width: 100%; height: 100%; }
+.sw-face { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+.sw-arc { fill: none; stroke: var(--accent-strong); stroke-width: 3; }
+.sw-tick { stroke: var(--muted); stroke-width: 1.2; stroke-linecap: round; }
+.sw-hand { stroke: var(--text); stroke-width: 2; stroke-linecap: round; }
+.sw-hub { fill: var(--text); }
+.sw-num { fill: var(--muted); font-size: 9px; font-weight: 700; text-anchor: middle; font-variant-numeric: tabular-nums; }
+.stopwatch.running .sw-num { fill: var(--text); }
+.stopwatch.done .sw-face { animation: sw-flash .5s steps(1) 6; }
+.stopwatch.done .sw-arc { stroke: var(--accent-text); }
+@keyframes sw-flash { 50% { fill: var(--flash); } }
+
 /* ---------- forms ---------- */
 .form { display: grid; gap: 12px; }
 .form label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
