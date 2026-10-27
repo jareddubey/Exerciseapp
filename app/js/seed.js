@@ -35,6 +35,8 @@ const CHEST_PRESS = { id: 'chest_press', name: 'Chest press machine', increment:
 const LANDMINE = { id: 'landmine_press', name: 'Half-kneeling landmine press', increment: 2.5, perSide: true, cue: 'Log plates only · knee down on the pressing side · neutral grip on the bar end · press up and forward, stop short of any front-of-shoulder pinch' };
 const LEG_EXT = { id: 'leg_ext', name: 'Leg extension', increment: 5, cue: 'If it stalls, check seat depth and pad position' };
 const PREACHER = { id: 'preacher_machine', name: 'Preacher curl machine', increment: 5, cue: 'Control the lowering · don’t bounce out of the bottom' };
+// Wednesday's core: the one lifting day without it (Mon Pallof, Fri body saw).
+const CARRY = { id: 'suitcase_carry', name: 'Suitcase carry', increment: 5, perHand: true, perSide: true, measure: 'distance', cue: 'One DB at your side · stand tall, don’t lean · slow steps' };
 const BODY_SAW = { id: 'body_saw', name: 'Body saw', increment: 0, bodyweight: true, measure: 'time', cue: 'Forearm plank, feet on sliders or a towel · rock 2–3 in back and forth · plain plank if the shoulder complains' };
 
 // ---------- armor ----------
@@ -42,6 +44,9 @@ const BODY_SAW = { id: 'body_saw', name: 'Body saw', increment: 0, bodyweight: t
 // strength work. The shoulder drills are light: stop a set when the shoulder
 // stops feeling centered, not at failure. Same at the gym and at home except
 // the row to ER (cable or band).
+// Sets 1–2 work the right adductors (an old proximal adductor magnus injury
+// leaves them sleepy), set 3 the left, whose adductor already grips.
+const COPENHAGEN = { id: 'copenhagen_plank', name: 'Copenhagen plank', increment: 0, bodyweight: true, measure: 'time', cue: 'Sets 1–2 right leg on the bench, set 3 left · short lever: knee on the bench · body straight · long lever once 30 s is easy' };
 const BIRD_DOG = { id: 'bird_dog', name: 'Bird dog', increment: 0, bodyweight: true, perSide: true, cue: '5-s hold each rep · brace, no sagging or hip rotation' };
 const SIDE_PLANK = { id: 'side_plank', name: 'Side plank', increment: 0, bodyweight: true, perSide: true, measure: 'time', cue: 'Straight line, hips up · on your knees if the right shoulder complains' };
 // Two weeks in place of the dead bug while the left adductor and hip flexor
@@ -67,8 +72,9 @@ const pairedPrimer = () => p(CUFF, 2, 8, 10, 60, 'A');
 const armor = (rowEr) => [
   p(SUPPORTED_DEAD_BUG, 3, 5, 6, 20, 'A'), p(BIRD_DOG, 2, 6, 6, 30, 'A'),
   p(CUFF, 3, 8, 15, 20, 'B'), p(HIP_FLEXOR, 2, 30, 30, 30, 'B'),
-  p(FLY, 2, 12, 15, 20, 'C'), p(SIDE_PLANK, 2, 20, 40, 30, 'C'),
-  p(rowEr, 2, 12, 15, 20, 'D'), p(CROSS_BODY, 3, 30, 30, 15, 'D'),
+  p(COPENHAGEN, 3, 15, 30, 20, 'C'), p(FLY, 2, 12, 15, 20, 'C'),
+  p(rowEr, 2, 12, 15, 20, 'D'), p(SIDE_PLANK, 2, 20, 40, 30, 'D'),
+  p(CROSS_BODY, 3, 30, 30, 15, 'E'),
 ];
 
 // ---------- home: dumbbells, bands, a pull-up bar and an incline bench ----------
@@ -100,9 +106,10 @@ export const HOME_PROGRAM = {
     primer(),
     p(KICKSTAND, 3, 8, 10, 60, 'A'), p(BAND_LAT, 3, 12, 20, 90, 'A'),
     p(LUNGE, 3, 8, 12, 45, 'B'), p(PUSH_UP, 3, 8, 15, 90, 'B'),
-    p(BRIDGE, 3, 12, 20, 30, 'C'), p(BAND_PULL_APART, 2, 12, 15, 60, 'C'),
+    p(BRIDGE, 3, 12, 20, 30, 'C'), p(CARRY, 2, 30, 40, 60, 'C'),
     p(HAMMER, 2, 10, 12, 30, 'D'), p(BAND_PUSHDOWN, 2, 12, 20, 60, 'D'),
-    p(STANDING_CURL, 2, 10, 15, 30, 'E'), p(SLEEPER, 3, 30, 30, 15, 'E'),
+    p(BAND_PULL_APART, 2, 12, 15, 30, 'E'), p(STANDING_CURL, 2, 10, 15, 60, 'E'),
+    p(SLEEPER, 3, 30, 30, 15, 'F'),
   ],
   fri: [
     p(GOBLET, 2, 12, 15, 60, 'A'), pairedPrimer(),
@@ -128,9 +135,10 @@ export const SEED_PROGRAM = {
     primer(),
     p(KICKSTAND, 3, 8, 10, 60, 'A'), p(LAT_PD, 3, 10, 12, 90, 'A'),
     p(LEG_PRESS, 3, 10, 15, 45, 'B'), p(PUSH_UP, 3, 8, 15, 90, 'B'),
-    p(BRIDGE, 3, 12, 20, 30, 'C'), p(REVERSE_PEC, 2, 12, 15, 60, 'C'),
+    p(BRIDGE, 3, 12, 20, 30, 'C'), p(CARRY, 2, 30, 40, 60, 'C'),
     p(HAMMER, 2, 10, 12, 30, 'D'), p(SA_PUSHDOWN, 2, 12, 15, 60, 'D'),
-    p(STANDING_CURL, 2, 10, 15, 30, 'E'), p(SLEEPER, 3, 30, 30, 15, 'E'),
+    p(REVERSE_PEC, 2, 12, 15, 30, 'E'), p(STANDING_CURL, 2, 10, 15, 60, 'E'),
+    p(SLEEPER, 3, 30, 30, 15, 'F'),
   ],
   fri: [
     p(HACK, 2, 12, 15, 60, 'A'), pairedPrimer(),

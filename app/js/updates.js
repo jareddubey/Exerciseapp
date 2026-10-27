@@ -288,7 +288,63 @@ export function recoveryArmorUpdate(program) {
       return out;
     });
     p = withProgramList(p, 'armor', loc, next);
-    changes.push(`${loc === 'home' ? 'Home ' : ''}Armor: recovery, mobility and motor control, about 50 min. Copenhagen plank, suitcase carry and the adductor rock-back sets come out (rock-back stays in the opener); bird dog 2 × 6 with 5-s holds, side plank 2 × 20–40 s, shorter rests`);
+    const out = armor.filter((x) => !next.some((y) => y.id === x.id)).map((x) => x.name);
+    changes.push(`${loc === 'home' ? 'Home ' : ''}Armor: recovery, mobility and motor control, about 50 min. Out: ${out.join(', ')} (rock-back stays in the opener); bird dog 2 × 6 with 5-s holds, side plank 2 × 20–40 s, shorter rests`);
+  }
+  return { program: p, changes };
+}
+
+// Armor and Wednesday as the recovery-Armor update shipped them.
+const RECOVERY_ARMOR = ['supported_dead_bug', 'bird_dog', 'side_lying_cuff_supersets', 'hip_flexor_stretch', 'supine_db_fly', 'side_plank', '*row_er', 'cross_body_stretch'];
+const CARRYLESS_WED = {
+  gym: ['side_lying_cuff_supersets', 'kickstand_rdl', 'lat_pull_down', 'leg_press', 'push_up', 'glut_bridge', 'reverse_pec_deck', 'hammer_curl', 'cable_tri_ext', 'standing_bicep_curl', 'sleeper_stretch'],
+  home: ['side_lying_cuff_supersets', 'kickstand_rdl', 'band_lat_pulldown', 'step_back_lunge', 'push_up', 'glut_bridge', 'band_pull_apart', 'hammer_curl', 'band_pushdown', 'standing_bicep_curl', 'sleeper_stretch'],
+};
+const OLD_COPENHAGEN_CUE = 'Short lever: knee on the bench · body straight · long lever once 30 s is easy';
+const matches = (list, ids) => list.length === ids.length
+  && list.every((x, i) => (ids[i] === '*row_er' ? x.id.endsWith('row_er') : x.id === ids[i]));
+
+/**
+ * Copenhagens back, carries on Wednesday (Oct 2026). Copenhagen plank returns
+ * to Armor as 2 sets right, 1 left (an old right adductor magnus injury). The
+ * suitcase carry moves to Wednesday, the one lifting day without core work.
+ * Days still in their shipped form are rebuilt; exercises the user already has
+ * keep their name, cue and load.
+ */
+export function copenhagenCarryUpdate(program) {
+  const unit = program.unit || 'lb';
+  let p = program;
+  const changes = [];
+  // Copenhagen at its old per-side default becomes right ×2, left ×1
+  const cph = allProgramExercises(p).find((x) => x.id === 'copenhagen_plank');
+  const seedCph = allProgramExercises(SEED_PROGRAM).find((x) => x.id === 'copenhagen_plank');
+  if (cph?.cue === OLD_COPENHAGEN_CUE) {
+    const { perSide, ...rest } = cph;
+    p = updateEverywhere(p, cph.id, { ...rest, cue: seedCph.cue });
+    changes.push('Copenhagen plank: sets 1–2 right leg on the bench, set 3 left');
+  }
+  const rebuild = (day, loc) => {
+    const existing = new Map(allProgramExercises(p).map((x) => [x.id, x]));
+    const next = programList(SEED_PROGRAM, day, loc).map((ex) => {
+      const mine = existing.get(ex.id);
+      if (!mine) return { ...ex, increment: convertIncrement(ex.increment, 'lb', unit) };
+      const out = { ...mine };
+      for (const k of SLOT_KEYS) { if (ex[k] === undefined) delete out[k]; else out[k] = ex[k]; }
+      return out;
+    });
+    p = withProgramList(p, day, loc, next);
+  };
+  for (const loc of ['gym', 'home']) {
+    if (loc === 'home' && !p.home) continue;
+    const label = loc === 'home' ? 'Home ' : '';
+    if (matches(programList(p, 'armor', loc), RECOVERY_ARMOR)) {
+      rebuild('armor', loc);
+      changes.push(`${label}Armor: Copenhagen plank is back, 3 sets (right, right, left), paired with the supine fly`);
+    }
+    if (matches(programList(p, 'wed', loc), CARRYLESS_WED[loc])) {
+      rebuild('wed', loc);
+      changes.push(`${label}Wed: suitcase carry 2 × 30–40 m/side, paired with the glute bridge; ${loc === 'home' ? 'band pull-apart' : 'reverse pec deck'} pairs with the standing curl`);
+    }
   }
   return { program: p, changes };
 }
@@ -302,4 +358,5 @@ export const PROGRAM_UPDATES = [
   { id: 'cuff-dose-2026-10', title: 'Right-shoulder superset dose', apply: cuffDoseUpdate },
   { id: 'capsule-stretch-2026-10', title: 'Daily posterior capsule stretch', apply: capsuleStretchUpdate },
   { id: 'recovery-armor-2026-10', title: 'Armor for recovery', apply: recoveryArmorUpdate },
+  { id: 'copenhagen-carry-2026-10', title: 'Copenhagens back, carries on Wednesday', apply: copenhagenCarryUpdate },
 ];

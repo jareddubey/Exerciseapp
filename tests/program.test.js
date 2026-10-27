@@ -5,7 +5,7 @@ import {
   suggestWeight, prefillWeights, lastFor, formatSets, formatTarget, convertProgramUnits, noIncrement, pairLabels, nextUp,
   isDayProgram, slotName, dayLabel, dayTitle, DAY,
 } from '../app/js/logic.js';
-import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, capsuleStretchUpdate, recoveryArmorUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
+import { fullBodyUpdate, cuffCueUpdate, controlWorkUpdate, pairingUpdate, supportedDeadBugUpdate, cuffDoseUpdate, capsuleStretchUpdate, recoveryArmorUpdate, copenhagenCarryUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
 import { SEED_PROGRAM, HOME_PROGRAM, DAY_NOTES } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday
@@ -286,7 +286,7 @@ test('control work update: moves shoulder drills to Armor on a program in its sh
   assert.equal(cuff.cue, 'mine', 'keeps the user\'s exercise');
   assert.equal(cuff.group, 'B', 'takes the new pair');
   assert.equal(program.armor.find((x) => x.id === 'supine_db_fly').increment, 1.25, 'kg increment');
-  assert.equal(program.wed.find((x) => x.id === 'reverse_pec_deck').group, 'C');
+  assert.equal(program.wed.find((x) => x.id === 'reverse_pec_deck').group, 'E');
   assert.deepEqual(controlWorkUpdate(program).changes, [], 'idempotent');
   assert.deepEqual(controlWorkUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
   const edited = withProgramList(old, 'armor', 'gym', oldArmor.slice(1));
@@ -351,9 +351,9 @@ test('capsule stretch update: sleeper on lifting days, cross-body on Armor, last
   const stretches = ['sleeper_stretch', 'cross_body_stretch'];
   let old = { ...structuredClone(SEED_PROGRAM), unit: 'lb' };
   for (const [loc, day] of SLOTS) old = withProgramList(old, day, loc, programList(old, day, loc).filter((x) => !stretches.includes(x.id)));
-  old = withProgramList(old, 'wed', 'gym', programList(old, 'wed', 'gym').map((x, i, l) => (i === l.length - 1 ? { ...x, restSec: 60 } : x)));
+  old = withProgramList(old, 'fri', 'gym', programList(old, 'fri', 'gym').map((x, i, l) => (i === l.length - 1 ? { ...x, restSec: 60 } : x)));
   const { program, changes } = capsuleStretchUpdate(old);
-  assert.equal(program.wed.at(-2).restSec, 30, 'the lone curl\'s rest becomes a pair rest');
+  assert.equal(program.fri.at(-2).restSec, 30, 'the lone curl\'s rest becomes a pair rest');
   assert.equal(changes.length, 1);
   for (const [loc, day] of SLOTS) {
     const got = programList(program, day, loc);
@@ -387,8 +387,42 @@ test('recovery Armor update: about 50 min of motor control, keeps the user\'s ex
   assert.deepEqual(recoveryArmorUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
   const edited = withProgramList(old, 'armor', 'gym', shipped('cable_row_er').slice(1));
   assert.equal(recoveryArmorUpdate(edited).program.armor.length, 10, 'an Armor the user changed is left alone');
-  for (const id of ['copenhagen_plank', 'suitcase_carry', 'adductor_rock_back']) assert.ok(!SEED_PROGRAM.armor.some((x) => x.id === id), id);
+  for (const id of ['suitcase_carry', 'adductor_rock_back']) assert.ok(!SEED_PROGRAM.armor.some((x) => x.id === id), id);
+  assert.match(changes[0], /Out: suitcase_carry, adductor_rock_back/);
   assert.match(DAY_NOTES.armor.at(-1), /dog walk/);
+});
+
+test('Copenhagen + carry update: Copenhagen right ×2 left ×1 on Armor, carries on Wednesday', () => {
+  const recovery = (rowEr) => ['supported_dead_bug', 'bird_dog', 'side_lying_cuff_supersets', 'hip_flexor_stretch', 'supine_db_fly', 'side_plank', rowEr, 'cross_body_stretch'];
+  const carryless = {
+    gym: ['side_lying_cuff_supersets', 'kickstand_rdl', 'lat_pull_down', 'leg_press', 'push_up', 'glut_bridge', 'reverse_pec_deck', 'hammer_curl', 'cable_tri_ext', 'standing_bicep_curl', 'sleeper_stretch'],
+    home: ['side_lying_cuff_supersets', 'kickstand_rdl', 'band_lat_pulldown', 'step_back_lunge', 'push_up', 'glut_bridge', 'band_pull_apart', 'hammer_curl', 'band_pushdown', 'standing_bicep_curl', 'sleeper_stretch'],
+  };
+  const all = new Map(allProgramExercises(SEED_PROGRAM).map((x) => [x.id, x]));
+  const mk = (id) => ({ ...all.get(id), cue: 'mine', sets: 9, group: 'Z' });
+  let old = { ...structuredClone(SEED_PROGRAM), unit: 'kg' };
+  old = withProgramList(old, 'armor', 'gym', recovery('cable_row_er').map(mk));
+  old = withProgramList(old, 'armor', 'home', recovery('band_row_er').map(mk));
+  for (const loc of ['gym', 'home']) old = withProgramList(old, 'wed', loc, carryless[loc].map(mk));
+  const { program, changes } = copenhagenCarryUpdate(old);
+  assert.equal(changes.length, 4);
+  for (const loc of ['gym', 'home']) {
+    for (const day of ['armor', 'wed']) {
+      const got = programList(program, day, loc);
+      const want = programList(SEED_PROGRAM, day, loc);
+      assert.deepEqual(got.map((x) => [x.id, x.sets, x.group]), want.map((x) => [x.id, x.sets, x.group]), `${loc} ${day}`);
+    }
+  }
+  assert.equal(program.wed.find((x) => x.id === 'suitcase_carry').increment, 2.5, 'kg increment');
+  assert.equal(program.wed.find((x) => x.id === 'glut_bridge').cue, 'mine', 'keeps the user\'s exercise');
+  assert.equal('group' in program.wed[0], false, 'Wednesday primer stays unpaired');
+  assert.deepEqual(copenhagenCarryUpdate(program).changes, [], 'idempotent');
+  assert.deepEqual(copenhagenCarryUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, [], 'no-op on the seed');
+  // an old per-side Copenhagen at its default cue becomes right ×2, left ×1
+  const perSide = updateEverywhere(SEED_PROGRAM, 'copenhagen_plank', { ...find('armor', 'copenhagen_plank'), perSide: true, cue: 'Short lever: knee on the bench · body straight · long lever once 30 s is easy' });
+  const fixed = copenhagenCarryUpdate(perSide).program.armor.find((x) => x.id === 'copenhagen_plank');
+  assert.deepEqual(fixed, find('armor', 'copenhagen_plank'));
+  assert.equal(find('wed', 'suitcase_carry', 'home').measure, 'distance');
 });
 
 test('updates in order take a first-shipped 3-day program to the current seed', () => {
