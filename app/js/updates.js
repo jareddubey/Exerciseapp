@@ -5,7 +5,7 @@
 //
 // The earlier A/B updates (arms-shoulders-2026-10, home-workouts-2026-10) were
 // superseded by the 3-day redesign, which replaces the whole program.
-import { convertProgramUnits, isDayProgram } from './logic.js';
+import { convertProgramUnits, isDayProgram, allProgramExercises, updateEverywhere } from './logic.js';
 import { SEED_PROGRAM } from './seed.js';
 
 /** 3-day full body + Armor (Oct 2026): replaces an A/B program, gym and home. */
@@ -25,6 +25,24 @@ export function fullBodyUpdate(program) {
   };
 }
 
+const OLD_CUFF_CUE = 'Side-lying ER → horizontal abduction (elbow bent 90°, only to body line) → flexion · progress lever, then weight';
+
+/**
+ * Right-shoulder superset cue (Oct 2026): straight-arm horizontal abduction is
+ * fine side-lying, where the back of the shoulder carries the load. Only a cue
+ * still at the old default changes, so the user's own edit is kept.
+ */
+export function cuffCueUpdate(program) {
+  const ex = allProgramExercises(program).find((x) => x.id === 'side_lying_cuff_supersets');
+  if (!ex || ex.cue !== OLD_CUFF_CUE) return { program, changes: [] };
+  const cue = allProgramExercises(SEED_PROGRAM).find((x) => x.id === ex.id).cue;
+  return {
+    program: updateEverywhere(program, ex.id, { ...ex, cue }),
+    changes: [`${ex.name}: straight arm side-lying (new cue: “${cue}”)`],
+  };
+}
+
 export const PROGRAM_UPDATES = [
   { id: 'full-body-3day-2026-10', title: '3-day full body + Armor', apply: fullBodyUpdate, undo: false },
+  { id: 'cuff-straight-arm-2026-10', title: 'Shoulder superset cue', apply: cuffCueUpdate },
 ];

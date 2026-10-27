@@ -5,7 +5,7 @@ import {
   suggestWeight, prefillWeights, lastFor, formatSets, formatTarget, convertProgramUnits, noIncrement, pairLabels, nextUp,
   isDayProgram, slotName, dayLabel, dayTitle, DAY,
 } from '../app/js/logic.js';
-import { fullBodyUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
+import { fullBodyUpdate, cuffCueUpdate, PROGRAM_UPDATES } from '../app/js/updates.js';
 import { SEED_PROGRAM, HOME_PROGRAM, DAY_NOTES } from '../app/js/seed.js';
 
 const T0 = new Date(2026, 0, 5, 18, 0).getTime(); // Monday
@@ -195,4 +195,20 @@ test('3-day update: idempotent, no-op on the seed, and offers no undo', () => {
   assert.deepEqual(fullBodyUpdate(once).changes, []);
   assert.deepEqual(fullBodyUpdate({ ...SEED_PROGRAM, unit: 'lb' }).changes, []);
   assert.equal(PROGRAM_UPDATES.find((u) => u.id === 'full-body-3day-2026-10').undo, false);
+});
+
+test('cuff cue update: changes the old default cue on every day, keeps a user edit', () => {
+  const old = 'Side-lying ER → horizontal abduction (elbow bent 90°, only to body line) → flexion · progress lever, then weight';
+  const withOld = updateEverywhere(SEED_PROGRAM, 'side_lying_cuff_supersets', { ...find('armor', 'side_lying_cuff_supersets'), cue: old });
+  const { program, changes } = cuffCueUpdate(withOld);
+  assert.equal(changes.length, 1);
+  for (const loc of ['gym', 'home']) {
+    const ex = programList(program, 'armor', loc).find((x) => x.id === 'side_lying_cuff_supersets');
+    assert.equal(ex.cue, find('armor', 'side_lying_cuff_supersets').cue);
+    assert.equal(ex.sets, 3);
+  }
+  assert.deepEqual(cuffCueUpdate(program).changes, []);
+  const mine = updateEverywhere(SEED_PROGRAM, 'side_lying_cuff_supersets', { ...find('armor', 'side_lying_cuff_supersets'), cue: 'my cue' });
+  assert.deepEqual(cuffCueUpdate(mine).changes, []);
+  assert.match(find('armor', 'side_lying_cuff_supersets').cue, /straight arm/);
 });
