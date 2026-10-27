@@ -1,22 +1,17 @@
 import * as db from './db.js';
-import { SEED_PROGRAM, DEFAULT_SETTINGS } from './seed.js';
+import { SEED_PROGRAM, DEFAULT_SETTINGS, DAY_NOTES } from './seed.js';
 import {
-  nextDay, otherDay, suggestWeight, lastPerformance, lastNote, deloadStatus, sessionsThisWeek,
+  nextDay, suggestWeight, lastFor, lastNote, deloadStatus, sessionsThisWeek,
   lastWorkout, backupStatus, newSession, formatSets, formatTarget, fmtNum, isFinished,
   performedSets, exerciseCatalog, exerciseHistory, convertProgramUnits, makeExerciseId, clean, DAY,
-  swapEntry, editEntry, programList, withProgramList, allProgramExercises, updateEverywhere, repsOnly, locationOf,
-  slotName, SLOTS,
+  swapEntry, editEntry, programList, withProgramList, allProgramExercises, updateEverywhere, repsOnly, noIncrement, locationOf,
+  slotName, SLOTS, DAYS, LIFT_DAYS, dayLabel, dayTitle, pairLabels, nextUp, isDayProgram,
 } from './logic.js';
-import { buildExport, parseImport, planImport, programsEqual, toCSV, mergeCut } from './backup.js';
-import { lineChart, timeChart } from './chart.js';
-import {
-  dayNum, isoFromDayNum, addDays, isValidIso, localIso, isSunday, totalWeeks, weekOf, weekRange, lastCompletedWeek,
-  mergeConfig, validateConfig, normalizeCut, roundTenth, waistValue, weighinList, rolling7, targetWeight, onTrackBand,
-  bandStatus, bestE1rmByWeek, evaluateWeek, isActionable, acceptRecommendation, currentTarget, checkpointStatus, nextCheckpoint,
-} from './cut.js';
-import { PROGRAM_UPDATES, homeWorkoutsUpdate } from './updates.js';
+import { buildExport, parseImport, planImport, programsEqual, toCSV } from './backup.js';
+import { lineChart } from './chart.js';
+import { PROGRAM_UPDATES } from './updates.js';
 
-const state = { program: null, settings: null, sessions: [], cut: null };
+const state = { program: null, settings: null, sessions: [] };
 const app = document.getElementById('app');
 
 // ---------------------------------------------------------------- helpers
@@ -274,12 +269,11 @@ function route() {
     case 'program': {
       const home = b === 'home';
       const d = home ? parts[2] : b;
-      view = viewProgram(home ? 'home' : 'gym', d === 'B' ? 'B' : 'A');
+      view = viewProgram(home ? 'home' : 'gym', DAYS.includes(d) ? d : 'mon');
       currentRoute = 'program';
       break;
     }
     case 'settings': view = viewSettings(); currentRoute = 'settings'; break;
-    case 'cut': view = b === 'settings' ? viewCutSettings() : viewCut(); currentRoute = 'cut'; break;
     default: view = viewHome(); currentRoute = '';
   }
   app.replaceChildren(view);
@@ -316,7 +310,8 @@ function viewHome() {
       h('ul', { style: 'margin:0 0 10px;padding-left:20px' }, notice.changes.map((c) => h('li', null, c))),
       h('div', { class: 'row' },
         h('button', { class: 'btn small', onclick: async () => { await saveSettings({ programNotice: null }); route(); } }, 'OK'),
-        h('button', { class: 'btn small', onclick: () => { if (confirm('Undo these program changes?')) undoProgramUpdate(notice); } }, 'Undo'))));
+        notice.undo === false ? null
+          : h('button', { class: 'btn small', onclick: () => { if (confirm('Undo these program changes?')) undoProgramUpdate(notice); } }, 'Undo'))));
   }
 
   if (updateReady) {
@@ -365,7 +360,7 @@ function viewHome() {
     const done = active.entries.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
     const total = active.entries.reduce((n, e) => n + e.sets.length, 0);
     root.append(h('button', { class: 'start', onclick: () => go('#/session') },
-      `Resume Session ${active.day}`,
+      `Resume ${dayTitle(active.day)}`,
       h('small', null, `${locationOf(active) === 'home' ? 'Home · ' : ''}Started ${fmtTime(active.startedAt)} · ${done}/${total} sets`)));
   } else {
     const loc = currentLocation();
@@ -374,27 +369,27 @@ function viewHome() {
         [['gym', 'Gym'], ['home', 'Home']].map(([l, label]) =>
           h('button', { 'aria-pressed': String(loc === l), onclick: async () => { await saveSettings({ location: l }); route(); } }, label))));
     }
-    const count = programList(state.program, next, loc).length;
+    const list = programList(state.program, next, loc);
+    const pairs = new Set(list.map((x) => x.group).filter(Boolean)).size;
     root.append(
       h('button', { class: 'start', onclick: () => startSession(next) },
-        `Start Session ${next}`,
-        h('small', null, `${loc === 'home' ? 'Home' : 'Gym'} · ${dl.active ? 'Deload week' : `${count} exercises`}`)),
-      h('div', { style: 'text-align:center' },
-        h('button', { class: 'linkish', onclick: () => startSession(otherDay(next)) }, `Start Session ${otherDay(next)} instead`)));
+        `Start ${dayTitle(next)}`,
+        h('small', null, `${loc === 'home' ? 'Home' : 'Gym'} · ${dl.active ? 'Deload week' : `${list.length} exercises${pairs ? ` · ${pairs} pairs` : ''}`}`)),
+      h('div', { class: 'row', style: 'justify-content:center;gap:0 4px' },
+        h('span', { class: 'muted small' }, 'Or start'),
+        DAYS.filter((d) => d !== next).map((d) => h('button', { class: 'linkish', onclick: () => startSession(d) }, dayLabel(d)))));
   }
 
-  const todayIso = localIso(now);
-  if (cutVisible(todayIso)) root.append(...cutHomeCard(todayIso));
-
+  const lifts = sessionsThisWeek(state.sessions, now, [...LIFT_DAYS, 'A', 'B']);
+  const armor = sessionsThisWeek(state.sessions, now, ['armor']);
   root.append(h('div', { class: 'stats' },
     h('div', { class: 'stat' }, h('b', null, last ? fmtDate(last.finishedAt, { weekday: undefined }) : '—'),
-      h('span', null, last ? `Last workout (${last.day}${locationOf(last) === 'home' ? ' · Home' : ''})` : 'No workouts yet')),
-    h('div', { class: 'stat' }, h('b', null, `${sessionsThisWeek(state.sessions, now)} / 3`), h('span', null, 'Sessions this week'))));
+      h('span', null, last ? `Last workout (${dayLabel(last.day)}${locationOf(last) === 'home' ? ' · Home' : ''})` : 'No workouts yet')),
+    h('div', { class: 'stat' }, h('b', null, `${lifts}/3 · ${armor}/2`), h('span', null, 'Lifting · Armor this week'))));
 
   root.append(h('nav', { class: 'nav' },
     h('a', { href: '#/history' }, 'History'),
-    h('a', { href: '#/cut' }, 'Cut progress'),
-    h('a', { href: currentLocation() === 'home' ? '#/program/home/A' : '#/program' }, 'Program'),
+    h('a', { href: progHash(currentLocation(), active ? active.day : next) }, 'Program'),
     h('a', { href: '#/settings' }, h('span', null, 'Settings & backup',
       h('span', { class: 'muted small' }, dl.anchor && !dl.active ? ` · ${dl.weeks} wk since deload` : '')))));
   return root;
@@ -427,10 +422,22 @@ function viewSession(session) {
 
   const header = h('header', { class: 'top' },
     h('a', { class: 'icon-btn', href: live ? '#/' : '#/history', 'aria-label': 'Back' }, '‹'),
-    h('h1', null, `Session ${session.day}${locationOf(session) === 'home' ? ' · Home' : ''}`, progress));
+    h('h1', null, `${dayTitle(session.day)}${locationOf(session) === 'home' ? ' · Home' : ''}`, progress));
 
   const root = h('div', { class: 'session' }, header);
-  session.entries.forEach((e, i) => root.append(exerciseCard(session, i, live, save)));
+  if (live && DAY_NOTES[session.day]) {
+    root.append(h('div', { class: 'day-note' }, DAY_NOTES[session.day].map((t) => h('p', null, t))));
+  }
+  // Paired exercises (A1, A2) sit together in one bordered group.
+  const labels = pairLabels(session.entries.map((e) => e.target || {}));
+  let group = null;
+  session.entries.forEach((e, i) => {
+    const card = exerciseCard(session, i, live, save, labels[i]);
+    const g = /\d$/.test(labels[i] || '') ? e.target.group : null;
+    if (!g) { group = null; root.append(card); return; }
+    if (group?.key !== g) { group = { key: g, el: h('div', { class: 'pair-group' }) }; root.append(group.el); }
+    group.el.append(card);
+  });
 
   const foot = h('div', { class: 'session-foot' });
   if (live) {
@@ -453,34 +460,42 @@ function viewSession(session) {
   return root;
 }
 
-function exerciseCard(session, ei, live, save) {
+function exerciseCard(session, ei, live, save, pairLabel) {
   const e = session.entries[ei];
   const unit = session.unit;
   const ex = e.target || programDef(e.exerciseId) ||
     { id: e.exerciseId, name: e.name, sets: e.sets.length, repMin: 0, repMax: 0, increment: 5, restSec: 90 };
   const bw = repsOnly(ex);
-  const wUnit = ex.perHand ? `${unit} ea` : unit;
-  const opts = { units: unit, before: session.startedAt, excludeId: session.id };
-  const last = lastPerformance(e.exerciseId, state.sessions, opts);
+  const wUnit = ex.notch ? 'notch' : ex.perHand ? `${unit} ea` : unit;
+  const opts = { units: unit, before: session.startedAt, excludeId: session.id, day: session.day };
+  const last = lastFor(e.exerciseId, state.sessions, opts);
   const sug = live ? suggestWeight(ex, state.sessions, opts) : null;
   const prevNote = lastNote(e.exerciseId, state.sessions, opts);
-  const inc = ex.increment || (unit === 'kg' ? 1.25 : 2.5);
+  const inc = ex.notch ? 1 : ex.increment || (unit === 'kg' ? 1.25 : 2.5);
   const repBase = (si) => last?.sets[si]?.reps ?? last?.sets[last.sets.length - 1]?.reps ?? ex.repMax;
+  // Reps, seconds (holds) or meters (carries); the stepper moves seconds and meters by 5.
+  const measure = ex.measure === 'time' ? 'Sec' : ex.measure === 'distance' ? 'Meters' : 'Reps';
+  const repStep = ex.measure ? 5 : 1;
+  const badge = sug?.increase && !ex.band ? `↑ Add ${fmtNum(ex.increment)} ${wUnit}`
+    : !sug?.hitTop ? null
+      : ex.band ? '↑ Stronger band'
+        : ex.notch ? '↓ Lower the bar a notch'
+          : ex.bodyweight && ex.repMin < ex.repMax ? '↑ Harder variation' : null;
 
   const count = h('span', { class: 'ex-count' });
   const updateCount = () => { count.textContent = `${e.sets.filter((s) => s.done).length}/${e.sets.length}`; };
 
   const card = h('section', { class: 'card', 'aria-label': e.name },
-    h('div', { class: 'ex-head' }, h('h2', null, e.name), count),
+    h('div', { class: 'ex-head' }, pairLabel ? h('span', { class: 'pair' }, pairLabel) : null, h('h2', null, e.name), count),
     ex.cue ? h('p', { class: 'cue' }, ex.cue) : null,
     h('div', { class: 'meta' },
       h('span', { class: 'target' }, formatTarget({ ...ex, sets: e.sets.length }, false)),
       h('span', { class: 'muted' }, `${ex.restSec}s rest`),
-      sug?.increase ? h('span', { class: 'badge-up' }, ex.band ? '↑ Stronger band' : `↑ Add ${fmtNum(ex.increment)} ${wUnit}`) : null,
+      badge ? h('span', { class: 'badge-up' }, badge) : null,
       ex.band ? h('span', { class: 'tag' }, 'BAND') : null),
     h('div', { class: 'last' },
       last
-        ? [`Last${last.deload ? ' (deload)' : ''} ${fmtDate(last.date, { weekday: undefined })}: `,
+        ? [`Last${last.deload ? ' (deload)' : ''}${last.day !== session.day ? ` (${dayLabel(last.day)})` : ''} ${fmtDate(last.date, { weekday: undefined })}: `,
            h('b', null, formatSets(last.sets, unit, ex))]
         : 'Last: first time'),
     prevNote ? h('div', { class: 'prev-note' }, `Note ${fmtDate(prevNote.date, { weekday: undefined })}: ${prevNote.note}`) : null);
@@ -497,9 +512,9 @@ function exerciseCard(session, ei, live, save) {
       save();
     };
     card.append(h('div', { class: 'wstep' },
-      h('span', null, `Weight, unticked sets (±${fmtNum(inc)})`),
-      h('button', { class: 'step', onclick: () => bump(-inc), 'aria-label': `Decrease weight by ${fmtNum(inc)} ${unit}` }, '−'),
-      h('button', { class: 'step', onclick: () => bump(inc), 'aria-label': `Increase weight by ${fmtNum(inc)} ${unit}` }, '+')));
+      h('span', null, `${ex.notch ? 'Notch' : 'Weight'}, unticked sets (±${fmtNum(inc)})`),
+      h('button', { class: 'step', onclick: () => bump(-inc), 'aria-label': `Decrease ${ex.notch ? 'notch' : 'weight'} by ${fmtNum(inc)} ${ex.notch ? '' : unit}` }, '−'),
+      h('button', { class: 'step', onclick: () => bump(inc), 'aria-label': `Increase ${ex.notch ? 'notch' : 'weight'} by ${fmtNum(inc)} ${ex.notch ? '' : unit}` }, '+')));
   }
 
   const setsEl = h('div', { class: 'sets' });
@@ -510,7 +525,7 @@ function exerciseCard(session, ei, live, save) {
     setsEl.replaceChildren(h('div', { class: `set-head${bw ? ' bw' : ''}`, 'aria-hidden': 'true' },
       h('span', null, '#'),
       bw ? null : h('span', { style: 'text-align:center' }, wUnit),
-      h('span', { class: 'c-reps' }, ex.perSide ? 'Reps /side' : 'Reps'),
+      h('span', { class: 'c-reps' }, ex.perSide ? `${measure} /side` : measure),
       h('span', { class: 'c-done' }, 'Done')));
     e.sets.forEach((s, si) => setsEl.append(setRow(s, si)));
     updateCount();
@@ -520,7 +535,7 @@ function exerciseCard(session, ei, live, save) {
     const row = h('div', { class: `set${bw ? ' bw' : ''}${s.done ? ' done' : ''}` });
     const reps = h('input', {
       class: 'num', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off',
-      'aria-label': `Set ${si + 1} reps`, placeholder: String(repBase(si)), value: s.reps ?? '',
+      'aria-label': `Set ${si + 1} ${measure.toLowerCase()}`, placeholder: String(repBase(si)), value: s.reps ?? '',
       oninput: () => { s.reps = parseNum(reps.value); save(); },
     });
     const stepReps = (d) => {
@@ -532,7 +547,7 @@ function exerciseCard(session, ei, live, save) {
     if (!bw) {
       const w = h('input', {
         class: 'num', type: 'text', inputmode: 'decimal', autocomplete: 'off',
-        'aria-label': `Set ${si + 1} weight (${wUnit})`, placeholder: '—', value: fmtNum(s.weight),
+        'aria-label': ex.notch ? `Set ${si + 1} notch` : `Set ${si + 1} weight (${wUnit})`, placeholder: '—', value: fmtNum(s.weight),
         oninput: () => {
           const old = s.weight;
           s.weight = parseNum(w.value);
@@ -557,13 +572,16 @@ function exerciseCard(session, ei, live, save) {
         row.classList.toggle('done', s.done);
         updateCount();
         save();
-        if (s.done && live) rest.start(ex.restSec || 60, e.name);
+        if (s.done && live) {
+          const nx = nextUp(session.entries, ei);
+          rest.start(ex.restSec || 60, nx == null ? e.name : `next: ${session.entries[nx].name}`);
+        }
       },
     }, '✓');
     row.append(
-      h('button', { class: 'step', onclick: () => stepReps(-1), 'aria-label': `Set ${si + 1} reps minus 1` }, '−'),
+      h('button', { class: 'step', onclick: () => stepReps(-repStep), 'aria-label': `Set ${si + 1} ${measure.toLowerCase()} minus ${repStep}` }, '−'),
       reps,
-      h('button', { class: 'step', onclick: () => stepReps(1), 'aria-label': `Set ${si + 1} reps plus 1` }, '+'),
+      h('button', { class: 'step', onclick: () => stepReps(repStep), 'aria-label': `Set ${si + 1} ${measure.toLowerCase()} plus ${repStep}` }, '+'),
       tick);
     return row;
   }
@@ -617,13 +635,35 @@ function exerciseDef(id) {
 const LOAD_TYPES = [
   ['weight', 'Weight (machine, cable, barbell)'],
   ['dumbbell', 'Dumbbells (weight per hand)'],
-  ['bodyweight', 'Bodyweight (reps only)'],
-  ['band', 'Band (reps only)'],
+  ['bodyweight', 'Bodyweight (no weight)'],
+  ['band', 'Band (no weight)'],
+  ['notch', 'Bar height (log the notch)'],
 ];
-const loadOf = (ex) => (ex?.band ? 'band' : ex?.bodyweight ? 'bodyweight' : ex?.perHand ? 'dumbbell' : 'weight');
-const loadFlags = (load) => ({ bodyweight: load === 'bodyweight', band: load === 'band', perHand: load === 'dumbbell' });
+const loadOf = (ex) => (ex?.notch ? 'notch' : ex?.band ? 'band' : ex?.bodyweight ? 'bodyweight' : ex?.perHand ? 'dumbbell' : 'weight');
+const loadFlags = (load) => ({ bodyweight: load === 'bodyweight', band: load === 'band', perHand: load === 'dumbbell', notch: load === 'notch' });
 const loadSelect = (value) => h('select', { class: 'field' },
   LOAD_TYPES.map(([v, label]) => h('option', { value: v, selected: v === value }, label)));
+
+// What each set counts: reps, seconds (holds) or meters (carries). Stored as `measure`.
+const MEASURES = [['reps', 'Reps'], ['time', 'Seconds (holds)'], ['distance', 'Meters (carries)']];
+const MEASURE_WORD = { reps: 'Reps', time: 'Seconds', distance: 'Meters' };
+/** Measure select plus the min/max labels that follow it. */
+function measureControls(value) {
+  const select = h('select', { class: 'field' },
+    MEASURES.map(([v, label]) => h('option', { value: v, selected: v === value }, label)));
+  const minL = h('span');
+  const maxL = h('span');
+  const relabel = () => { minL.textContent = `${MEASURE_WORD[select.value]} min`; maxL.textContent = `${MEASURE_WORD[select.value]} max`; };
+  select.addEventListener('change', relabel);
+  relabel();
+  return { select, minL, maxL };
+}
+/** Store the measure on an exercise (absent means reps). */
+function setMeasure(ex, value) {
+  if (value === 'time' || value === 'distance') ex.measure = value;
+  else delete ex.measure;
+  return ex;
+}
 
 // Inline form that replaces an exercise card to change its parameters mid-workout.
 // Same id, so history and progression continue.
@@ -642,6 +682,7 @@ function editPanel(session, ei) {
   };
   const perSide = h('input', { type: 'checkbox', checked: !!base.perSide });
   const load = loadSelect(loadOf(base));
+  const meas = measureControls(base.measure || 'reps');
   const permanent = h('input', { type: 'checkbox' });
 
   async function apply() {
@@ -655,7 +696,8 @@ function editPanel(session, ei) {
       repMin: Math.max(1, Math.round(n(f.repMin, 10))), repMax: Math.max(1, Math.round(n(f.repMax, 12))),
       perSide: perSide.checked, ...loadFlags(load.value),
     };
-    ex.increment = repsOnly(ex) ? 0 : Math.max(0, n(f.increment, 5));
+    setMeasure(ex, meas.select.value);
+    ex.increment = noIncrement(ex) ? 0 : Math.max(0, n(f.increment, 5));
     if (ex.repMax < ex.repMin) [ex.repMin, ex.repMax] = [ex.repMax, ex.repMin];
     if (repsOnly(ex) && !repsOnly(base) && e.sets.some((s) => s.weight != null)
       && !confirm('Reps-only load clears the weights logged for this exercise today. Continue?')) return;
@@ -664,7 +706,7 @@ function editPanel(session, ei) {
     session.entries = session.entries.map((x, i) => (i === ei ? r.entry : x));
     autosave(session);
     await flushSave(session.id);
-    if (permanent.checked) await saveProgram(updateEverywhere(state.program, e.exerciseId, ex));
+    if (permanent.checked) await saveProgram(updateEverywhere(state.program, e.exerciseId, ex, [locationOf(session), session.day]));
     toast(r.kept ? `Saved · kept ${r.kept} logged set${r.kept > 1 ? 's' : ''}` : permanent.checked ? 'Saved to workout and program' : 'Saved for this workout');
     route();
   }
@@ -678,13 +720,15 @@ function editPanel(session, ei) {
       h('label', null, 'Name', f.name),
       h('label', null, 'Cue (optional)', f.cue),
       h('label', null, 'Load', load),
+      h('label', null, 'Each set counts', meas.select),
       h('div', { class: 'grid2' },
         h('label', null, session.deload ? 'Sets today (deload)' : 'Sets', f.sets),
-        h('label', null, 'Rest (sec)', f.restSec)),
-      h('div', { class: 'grid2' }, h('label', null, 'Reps min', f.repMin), h('label', null, 'Reps max', f.repMax)),
+        h('label', null, 'Rest after (sec)', f.restSec)),
+      h('div', { class: 'grid2' }, h('label', null, meas.minL, f.repMin), h('label', null, meas.maxL, f.repMax)),
       h('label', null, `Increment (${session.unit})`, f.increment),
-      h('label', { class: 'check' }, perSide, 'Reps per side'),
+      h('label', { class: 'check' }, perSide, 'Per side'),
       inProgram ? h('label', { class: 'check' }, permanent, `Also save to the program (${shared.join(', ')})`) : null,
+      inProgram && shared.length > 1 ? h('p', { class: 'muted small' }, `Name, cue and load change on every day; sets, reps and rest only on ${dayLabel(session.day)}.`) : null,
       h('div', { class: 'row' },
         h('button', { class: 'btn primary', onclick: apply }, 'Save'),
         h('button', { class: 'btn', onclick: () => route() }, 'Cancel'))),
@@ -711,13 +755,15 @@ function swapPanel(session, ei) {
   };
   const perSide = h('input', { type: 'checkbox' });
   const load = loadSelect(loadOf(base));
+  const meas = measureControls('reps');
   const fields = h('div', { class: 'form' },
     h('label', null, 'Name', name),
     h('label', null, 'Load', load),
-    h('div', { class: 'grid2' }, h('label', null, 'Sets', f.sets), h('label', null, 'Rest (sec)', f.restSec)),
-    h('div', { class: 'grid2' }, h('label', null, 'Reps min', f.repMin), h('label', null, 'Reps max', f.repMax)),
+    h('label', null, 'Each set counts', meas.select),
+    h('div', { class: 'grid2' }, h('label', null, 'Sets', f.sets), h('label', null, 'Rest after (sec)', f.restSec)),
+    h('div', { class: 'grid2' }, h('label', null, meas.minL, f.repMin), h('label', null, meas.maxL, f.repMax)),
     h('label', null, `Increment (${units()})`, f.increment),
-    h('label', { class: 'check' }, perSide, 'Reps per side'));
+    h('label', { class: 'check' }, perSide, 'Per side'));
   pick.addEventListener('change', () => { fields.hidden = !!pick.value; });
 
   const loc = locationOf(session);
@@ -738,9 +784,13 @@ function swapPanel(session, ei) {
         repMin: Math.max(1, Math.round(n(f.repMin, 10))), repMax: Math.max(1, Math.round(n(f.repMax, 12))),
         perSide: perSide.checked, ...loadFlags(load.value),
       };
-      ex.increment = repsOnly(ex) ? 0 : Math.max(0, n(f.increment, 5));
+      setMeasure(ex, meas.select.value);
+      ex.increment = noIncrement(ex) ? 0 : Math.max(0, n(f.increment, 5));
       if (ex.repMax < ex.repMin) [ex.repMin, ex.repMax] = [ex.repMax, ex.repMin];
     }
+    // The replacement takes over this slot's pair and, in a pair, its rest.
+    if (base.group) ex = { ...ex, group: base.group, restSec: base.restSec ?? ex.restSec };
+    else delete ex.group;
     const r = swapEntry(session, ei, ex, state.sessions);
     session.entries = r.entries;
     autosave(session);
@@ -793,7 +843,7 @@ async function discardSession(session) {
 }
 
 async function deleteSessionConfirm(session) {
-  if (!confirm(`Delete Session ${session.day} from ${fmtDate(session.startedAt)}? This can’t be undone.`)) return;
+  if (!confirm(`Delete ${dayTitle(session.day)} from ${fmtDate(session.startedAt)}? This can’t be undone.`)) return;
   const p = pending.get(session.id);
   if (p) { clearTimeout(p.t); pending.delete(session.id); }
   await db.deleteSession(session.id);
@@ -820,7 +870,7 @@ function viewHistory(tab) {
       const mins = Math.round((s.finishedAt - s.startedAt) / 60000);
       return h('a', { href: `#/session/${s.id}` },
         h('div', null,
-          h('div', { class: 'l1' }, `${fmtDate(s.startedAt, { year: 'numeric' })} · ${s.day}${locationOf(s) === 'home' ? ' · Home' : ''} `, s.deload ? h('span', { class: 'tag deload' }, 'DELOAD') : null),
+          h('div', { class: 'l1' }, `${fmtDate(s.startedAt, { year: 'numeric' })} · ${dayLabel(s.day)}${locationOf(s) === 'home' ? ' · Home' : ''} `, s.deload ? h('span', { class: 'tag deload' }, 'DELOAD') : null),
           h('div', { class: 'l2' }, `${sets} sets · ${mins} min`)));
     })));
   } else {
@@ -848,16 +898,18 @@ function viewExercise(id) {
     root.append(h('p', { class: 'empty' }, 'No history yet.'));
     return root;
   }
-  const weighted = hist.some((x) => x.top != null);
+  // A notch number isn't a load to chart; holds and carries total seconds or meters.
+  const weighted = !ex.notch && hist.some((x) => x.top != null);
   const points = hist.map((x) => ({ x: x.date, y: weighted ? x.top : x.sets.reduce((n, s) => n + s.reps, 0) }))
     .filter((p) => p.y != null);
+  const total = ex.measure === 'time' ? 'Total seconds' : ex.measure === 'distance' ? 'Total meters' : 'Total reps';
   root.append(h('div', { class: 'card' },
-    h('h2', null, weighted ? `Top-set weight (${units()}${ex.perHand ? ' each' : ''})` : 'Total reps'),
+    h('h2', null, weighted ? `Top-set weight (${units()}${ex.perHand ? ' each' : ''})` : total),
     lineChart(points, { label: `${name} progress chart` })));
   root.append(h('div', { class: 'list' }, [...hist].reverse().map((x) =>
     h('a', { href: `#/session/${x.sessionId}` },
       h('div', null,
-        h('div', { class: 'l1' }, `${fmtDate(x.date, { year: 'numeric' })} · ${x.day}${x.location === 'home' ? ' · Home' : ''}`, x.deload ? ' · deload' : ''),
+        h('div', { class: 'l1' }, `${fmtDate(x.date, { year: 'numeric' })} · ${dayLabel(x.day)}${x.location === 'home' ? ' · Home' : ''}`, x.deload ? ' · deload' : ''),
         h('div', { class: 'l2' }, formatSets(x.sets, units(), ex) || '—'),
         x.note ? h('div', { class: 'l2' }, `“${x.note}”`) : null)))));
   return root;
@@ -869,7 +921,7 @@ let editing = null; // { loc, day, index, mode: 'edit'|'add'|'swap' }
 
 const progHash = (loc, day) => (loc === 'home' ? `#/program/home/${day}` : `#/program/${day}`);
 const isEditing = (loc, day) => editing && editing.loc === loc && editing.day === day;
-const loadLabel = (ex) => (ex.band ? 'band' : ex.bodyweight ? 'bodyweight'
+const loadLabel = (ex) => (ex.band ? 'band' : ex.bodyweight ? 'bodyweight' : ex.notch ? 'bar notch'
   : `+${fmtNum(ex.increment)} ${units()}${ex.perHand ? ' ea' : ''}`);
 // Other program days that also contain this exercise id (shared history).
 const otherSlotsWith = (id, loc, day) => SLOTS
@@ -885,10 +937,12 @@ function viewProgram(loc, day) {
       [['gym', 'Gym'], ['home', 'Home']].map(([l, label]) =>
         h('button', { 'aria-pressed': String(l === loc), onclick: nav(l, day) }, label))),
     h('div', { class: 'seg', role: 'group', 'aria-label': 'Day', style: 'margin-top:8px' },
-      ['A', 'B'].map((d) => h('button', { 'aria-pressed': String(d === day), onclick: nav(loc, d) }, `Session ${d}`))));
+      DAYS.map((d) => h('button', { 'aria-pressed': String(d === day), onclick: nav(loc, d) }, dayLabel(d)))));
+  if (DAY_NOTES[day]) root.append(h('div', { class: 'day-note' }, DAY_NOTES[day].map((t) => h('p', null, t))));
   root.append(h('p', { class: 'muted small' },
-    `Weights and increments in ${units()}. Renaming keeps history; “Swap” starts a new exercise and leaves the old history under the old one.`));
+    `Weights and increments in ${units()}. Exercises with the same pair letter alternate sets. Renaming keeps history; “Swap” starts a new exercise and leaves the old history under the old one.`));
 
+  const labels = pairLabels(list);
   list.forEach((ex, i) => {
     if (isEditing(loc, day) && editing.index === i && editing.mode !== 'add') {
       root.append(exerciseForm(loc, day, i, editing.mode));
@@ -896,7 +950,8 @@ function viewProgram(loc, day) {
     }
     const shared = otherSlotsWith(ex.id, loc, day);
     root.append(h('div', { class: 'card prog-item' },
-      h('h2', null, ex.name, shared.map((name) => h('span', { class: 'tag', style: 'margin-left:6px' }, `ALSO ${name.toUpperCase()}`))),
+      h('div', { class: 'ex-head' }, labels[i] ? h('span', { class: 'pair' }, labels[i]) : null,
+        h('h2', null, ex.name, shared.map((name) => h('span', { class: 'tag', style: 'margin-left:6px' }, `ALSO ${name.toUpperCase()}`)))),
       ex.cue ? h('p', { class: 'cue' }, ex.cue) : null,
       h('div', { class: 'meta muted' }, `${formatTarget(ex)} · ${ex.restSec}s rest · ${loadLabel(ex)}`),
       h('div', { class: 'row' },
@@ -934,7 +989,7 @@ function exerciseForm(loc, day, index, mode) {
   const base = mode === 'edit' ? orig : {
     name: '', cue: '', sets: orig?.sets ?? 2, repMin: orig?.repMin ?? 10, repMax: orig?.repMax ?? 12,
     restSec: orig?.restSec ?? 60, increment: orig?.increment || (units() === 'kg' ? 2.5 : 5), perSide: false,
-    perHand: loc === 'home',
+    perHand: loc === 'home', group: orig?.group ?? '',
   };
   const f = {};
   const field = (key, label, attrs = {}) => {
@@ -943,6 +998,7 @@ function exerciseForm(loc, day, index, mode) {
   };
   f.perSide = h('input', { type: 'checkbox', checked: !!base.perSide });
   f.load = loadSelect(loadOf(base));
+  const meas = measureControls(base.measure || 'reps');
 
   // Reuse an existing exercise (shares its history), e.g. biceps curl on both days.
   let reuse = null;
@@ -961,6 +1017,8 @@ function exerciseForm(loc, day, index, mode) {
         for (const k of ['cue', 'sets', 'repMin', 'repMax', 'restSec', 'increment']) f[k].value = ex[k] ?? '';
         f.perSide.checked = !!ex.perSide;
         f.load.value = loadOf(ex);
+        meas.select.value = ex.measure || 'reps';
+        meas.select.dispatchEvent(new Event('change'));
       });
     }
   }
@@ -973,11 +1031,15 @@ function exerciseForm(loc, day, index, mode) {
     field('name', 'Name', { required: true, autocomplete: 'off' }),
     field('cue', 'Cue (optional)', { autocomplete: 'off' }),
     h('label', null, 'Load', f.load),
-    h('div', { class: 'grid2' }, field('sets', 'Sets', { ...num, inputmode: 'numeric' }), field('restSec', 'Rest (sec)', { ...num, inputmode: 'numeric' })),
-    h('div', { class: 'grid2' }, field('repMin', 'Reps min', { ...num, inputmode: 'numeric' }), field('repMax', 'Reps max', { ...num, inputmode: 'numeric' })),
+    h('label', null, 'Each set counts', meas.select),
+    h('div', { class: 'grid2' }, field('sets', 'Sets', { ...num, inputmode: 'numeric' }), field('restSec', 'Rest after (sec)', { ...num, inputmode: 'numeric' })),
+    h('div', { class: 'grid2' },
+      h('label', null, meas.minL, f.repMin = h('input', { class: 'field', value: base.repMin ?? '', ...num, inputmode: 'numeric' })),
+      h('label', null, meas.maxL, f.repMax = h('input', { class: 'field', value: base.repMax ?? '', ...num, inputmode: 'numeric' }))),
     field('increment', `Increment (${units()})`, num),
-    h('label', { class: 'check' }, f.perSide, 'Reps per side'),
-    shared.length ? h('p', { class: 'muted small' }, `Also in ${shared.join(', ')}: changes apply there too.`) : null,
+    field('group', 'Pair letter (optional, e.g. A)', { autocomplete: 'off', maxlength: '2', autocapitalize: 'characters' }),
+    h('label', { class: 'check' }, f.perSide, 'Per side'),
+    shared.length ? h('p', { class: 'muted small' }, `Also in ${shared.join(', ')}: name, cue and load change there too; sets, reps, rest and pair stay per day.`) : null,
     h('div', { class: 'row' },
       h('button', { class: 'btn primary', type: 'submit' }, 'Save'),
       h('button', { class: 'btn', type: 'button', onclick: () => { editing = null; route(); } }, 'Cancel')));
@@ -992,7 +1054,10 @@ function exerciseForm(loc, day, index, mode) {
     };
     if (!fields.name) return alert('Name is required.');
     if (fields.repMax < fields.repMin) [fields.repMin, fields.repMax] = [fields.repMax, fields.repMin];
-    fields.increment = repsOnly(fields) ? 0 : Math.max(0, n('increment', 0));
+    setMeasure(fields, meas.select.value);
+    fields.increment = noIncrement(fields) ? 0 : Math.max(0, n('increment', 0));
+    const group = f.group.value.trim().toUpperCase();
+    if (group) fields.group = group;
 
     let id;
     if (mode === 'edit') id = orig.id;
@@ -1006,7 +1071,7 @@ function exerciseForm(loc, day, index, mode) {
     if (mode === 'add') next.push(ex);
     else next[index] = ex;
     // keep shared exercises (same id on other days) in sync
-    const program = updateEverywhere(withProgramList(state.program, day, loc, next), id, ex);
+    const program = updateEverywhere(withProgramList(state.program, day, loc, next), id, ex, [loc, day]);
     editing = null;
     await saveProgram(program);
     toast('Program saved');
@@ -1032,11 +1097,6 @@ function viewSettings() {
       h('input', { type: 'checkbox', checked: !!s.beep, onchange: async (ev) => { await saveSettings({ beep: ev.target.checked }); } }),
       'Beep when rest is over'),
     h('p', { class: 'muted small' }, 'Vibration works on Android. iPhone doesn’t allow web apps to vibrate, and the beep is muted by the silent switch, so the bar also flashes.'));
-
-  root.append(h('h3', null, 'Cut'),
-    h('div', { class: 'list' }, h('a', { href: '#/cut/settings' }, h('div', null,
-      h('div', { class: 'l1' }, 'Cut plan, main lifts, holidays'),
-      h('div', { class: 'l2' }, cfg().phase.name)))));
 
   root.append(h('h3', null, 'Backup'),
     h('p', { class: 'small' }, s.lastBackupAt ? `Last backup: ${fmtDate(s.lastBackupAt, { year: 'numeric' })} (${Math.floor((Date.now() - s.lastBackupAt) / DAY)} days ago)` : 'Never backed up.'),
@@ -1102,7 +1162,7 @@ async function shareOrDownload(filename, text, type) {
 
 async function exportJSON() {
   await flushSave();
-  const data = buildExport({ program: state.program, settings: state.settings, sessions: state.sessions, cut: state.cut });
+  const data = buildExport({ program: state.program, settings: state.settings, sessions: state.sessions });
   const ok = await shareOrDownload(`gym-tracker-${today()}.json`, JSON.stringify(data, null, 1), 'application/json');
   if (ok) {
     await saveSettings({ lastBackupAt: Date.now() });
@@ -1128,17 +1188,16 @@ async function importJSON(input) {
     return;
   }
   const plan = planImport(state.sessions, data.sessions);
-  const progDiff = data.program && !programsEqual(data.program, state.program);
-  const cutIn = data.cut ? normalizeCut(data.cut) : null;
-  const cutPlan = cutIn ? mergeCut(state.cut, cutIn) : null;
+  // Backups from before the 3-day program hold an A/B program; it isn't applied.
+  const oldProgram = data.program && !isDayProgram(data.program);
+  const progDiff = data.program && !oldProgram && !programsEqual(data.program, state.program);
   const lines = [
     `Import backup from ${data.exportedAt ? fmtDate(Date.parse(data.exportedAt), { year: 'numeric' }) : 'unknown date'}?`,
     `• ${plan.added.length} new session(s) will be added`,
     plan.conflicts.length ? `• ${plan.conflicts.length} session(s) differ from yours (you’ll be asked)` : null,
     plan.identical ? `• ${plan.identical} already present` : null,
     progDiff ? '• The backup has a different program (you’ll be asked)' : null,
-    cutPlan?.added ? `• ${cutPlan.added} new cut entr${cutPlan.added === 1 ? 'y' : 'ies'} (weigh-ins, waist, holidays, calorie changes)` : null,
-    cutPlan?.conflicts ? `• ${cutPlan.conflicts} cut item(s) differ from yours (you’ll be asked)` : null,
+    oldProgram ? '• The backup’s program is the old A/B one, so your current program is kept' : null,
   ].filter(Boolean);
   if (!confirm(lines.join('\n'))) return;
 
@@ -1149,16 +1208,8 @@ async function importJSON(input) {
   if (toWrite.length) await db.putSessions(toWrite);
   if (progDiff && confirm('Replace your current program with the one from the backup?\n\nCancel keeps your current program.')) {
     const incomingUnit = data.program.unit || data.settings?.units || 'lb';
-    // Backups from before home workouts existed get the default home days.
-    const incoming = { ...data.program, unit: incomingUnit };
-    await saveProgram(incoming.home ? incoming : homeWorkoutsUpdate(incoming).program);
+    await saveProgram({ ...data.program, unit: incomingUnit });
     await saveSettings({ units: incomingUnit });
-  }
-  if (cutPlan && (cutPlan.added || cutPlan.conflicts)) {
-    const replace = cutPlan.conflicts > 0 &&
-      confirm(`Replace ${cutPlan.conflicts} cut item(s) (weigh-ins, waist, plan or main lifts) with the backup’s version?\n\nCancel keeps yours.`);
-    state.cut = mergeCut(state.cut, cutIn, { replace }).cut;
-    await saveCut();
   }
   const inc = data.settings || {};
   const latest = (k) => Math.max(state.settings[k] || 0, inc[k] || 0) || null;
@@ -1179,421 +1230,10 @@ async function clearData() {
   go('#/');
 }
 
-// ---------------------------------------------------------------- cut
-
-const cfg = () => state.cut.config;
-const fmtIso = (iso, opts = {}) =>
-  new Date(dayNum(iso) * 86400000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC', ...opts });
-const fmtLb = (x) => (x == null ? '—' : `${fmtNum(Math.round(x * 10) / 10)} lb`);
-const fmtLoss = (loss) => (loss == null ? '—' : loss >= 0 ? `−${fmtNum(Math.round(loss * 100) / 100)} lb` : `+${fmtNum(Math.round(-loss * 100) / 100)} lb`);
-const BAND_TEXT = { on_track: 'On track', ahead: 'Ahead of plan (losing faster than the band)', behind: 'Behind plan' };
-const range2 = (r) => `${r[0]}–${r[1]}`;
-
-async function saveCut() {
-  await db.setKV('cut', state.cut);
-}
-
-/** Show the cut card from a week before the start until a week after the end. */
-function cutVisible(todayIso) {
-  const p = cfg().phase;
-  return todayIso >= addDays(p.startDate, -7) && todayIso <= addDays(p.endDate, 7);
-}
-
-/** Week whose check-in is due: the latest completed one, if the phase has started. */
-const checkinWeek = (todayIso) => lastCompletedWeek(todayIso, cfg());
-
-/** Week N's result needs an answer: actionable, not accepted, not dismissed. */
-function pendingRec(n) {
-  if (n < 1) return null;
-  const res = evaluateWeek(n, state.cut, state.sessions);
-  if (!isActionable(res) || state.cut.dismissed[n] || state.cut.calorieChanges.some((c) => c.week === n)) return null;
-  return res;
-}
-
-async function saveWeighin(date, weight, bodyfat, note) {
-  const w = parseNum(weight);
-  if (w == null || w < 50 || w > 700) { alert('Enter a weight in lb, e.g. 173.4'); return false; }
-  if (!isValidIso(date)) { alert('Pick a date.'); return false; }
-  const entry = { weightLb: roundTenth(w) };
-  const bf = parseNum(bodyfat);
-  if (bf != null) entry.bodyfatPct = roundTenth(bf);
-  if (note && note.trim()) entry.note = note.trim();
-  const prev = state.cut.weighins[date];
-  if (prev && !confirm(`You already logged ${fmtLb(prev.weightLb)} on ${fmtIso(date, { weekday: 'short' })}. Replace it with ${fmtLb(entry.weightLb)}?`)) return false;
-  state.cut.weighins[date] = entry;
-  await saveCut();
-  toast(`Logged ${fmtLb(entry.weightLb)}`);
-  return true;
-}
-
-function weighinForm(todayIso) {
-  const existing = state.cut.weighins[todayIso];
-  const weight = h('input', { class: 'field', type: 'text', inputmode: 'decimal', placeholder: 'Weight (lb)', 'aria-label': 'Weight in lb', value: existing ? fmtNum(existing.weightLb) : '' });
-  const date = h('input', { class: 'field', type: 'date', value: todayIso, max: todayIso, 'aria-label': 'Date' });
-  const bf = h('input', { class: 'field', type: 'text', inputmode: 'decimal', placeholder: 'Body fat % (optional)', 'aria-label': 'Body fat percent' });
-  const note = h('input', { class: 'field', type: 'text', placeholder: 'Note (optional)', 'aria-label': 'Note' });
-  const submit = async () => { if (await saveWeighin(date.value, weight.value, bf.value, note.value)) route(); };
-  weight.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') submit(); });
-  return h('div', null,
-    h('div', { class: 'weigh' }, weight, h('button', { class: 'btn primary', onclick: submit }, existing ? 'Update' : 'Log')),
-    h('details', { class: 'small', style: 'margin-top:6px' },
-      h('summary', { class: 'muted' }, 'Other date, body fat, note'),
-      h('div', { class: 'cfg-group' }, date, bf, note)));
-}
-
-function waistForm(n) {
-  const sunday = weekRange(n, cfg()).end;
-  const r1 = h('input', { class: 'field', type: 'text', inputmode: 'decimal', placeholder: 'Reading 1 (in)', 'aria-label': 'Waist reading 1' });
-  const r2 = h('input', { class: 'field', type: 'text', inputmode: 'decimal', placeholder: 'Reading 2 (in)', 'aria-label': 'Waist reading 2' });
-  return h('div', { style: 'margin-top:10px' },
-    h('div', { class: 'small' }, h('b', null, 'Waist'), ` for ${fmtIso(sunday, { weekday: 'short' })}: two readings, averaged.`),
-    h('div', { class: 'cfg-pair', style: 'margin-top:6px' }, r1, r2),
-    h('button', { class: 'btn block', style: 'margin-top:8px', onclick: async () => {
-      const a = parseNum(r1.value);
-      const b = parseNum(r2.value);
-      const v = waistValue(a, b);
-      if (v == null || v < 15 || v > 80) { alert('Enter at least one waist reading in inches, e.g. 34.8'); return; }
-      state.cut.waist[sunday] = { r1: a, r2: b, waistIn: v };
-      await saveCut();
-      toast(`Waist ${fmtNum(v)} in`);
-      route();
-    } }, 'Save waist'));
-}
-
-const hasWaist = (n) => {
-  const r = weekRange(n, cfg());
-  return Object.keys(state.cut.waist).some((d) => d >= r.start && d <= r.end);
-};
-
-/** Sunday check-in for completed week N. */
-function checkinCard(n) {
-  const res = evaluateWeek(n, state.cut, state.sessions);
-  const sig = res.signal;
-  const r = weekRange(n, cfg());
-  const accepted = state.cut.calorieChanges.find((c) => c.week === n);
-  const band = bandStatus(n, state.cut);
-  const card = h('div', { class: 'card' },
-    h('h2', null, `Week ${n} check-in`, h('span', { class: 'muted small' }, ` · ${fmtIso(r.start)}–${fmtIso(r.end)}`)),
-    h('dl', { class: 'kv' },
-      h('dt', null, 'Average'), h('dd', null, sig.stats.avg == null ? 'No weigh-ins' : `${fmtLb(sig.stats.avg)} (${sig.stats.count} weigh-in${sig.stats.count === 1 ? '' : 's'})`),
-      h('dt', null, n === 1 ? 'vs start' : 'vs last week'), h('dd', null, fmtLoss(sig.loss)),
-      h('dt', null, 'Status'), h('dd', null, band ? BAND_TEXT[band] : '—'),
-      sig.lifts.compared ? [h('dt', null, 'Main lifts'), h('dd', null, `${sig.lifts.downCount} of ${sig.lifts.compared} down`)] : null));
-  if (!hasWaist(n)) card.append(waistForm(n));
-  const act = isActionable(res);
-  const box = h('div', { class: `rec${act && !accepted ? ' act' : ''}` }, h('div', null, res.reason));
-  if (accepted) {
-    box.append(h('div', { class: 'small', style: 'margin-top:6px' }, h('b', null, 'Accepted '), `${fmtIso(accepted.date)}: ${accepted.oldKcal} → ${accepted.newKcal} kcal.`));
-  } else if (act && state.cut.dismissed[n]) {
-    box.append(h('div', { class: 'small muted', style: 'margin-top:6px' }, 'Dismissed. Target unchanged.'),
-      h('button', { class: 'linkish', onclick: async () => { delete state.cut.dismissed[n]; await saveCut(); route(); } }, 'Undo dismiss'));
-  } else if (act) {
-    box.append(h('div', { class: 'row', style: 'margin-top:8px' },
-      h('button', { class: 'btn small primary', onclick: async () => {
-        state.cut.calorieChanges.push(acceptRecommendation(res, localIso()));
-        await saveCut();
-        toast(`Calorie target: ${res.toKcal} kcal`);
-        route();
-      } }, `Accept (${res.toKcal} kcal)`),
-      h('button', { class: 'btn small', onclick: async () => { state.cut.dismissed[n] = true; await saveCut(); route(); } }, 'Dismiss')));
-  }
-  card.append(box);
-  return card;
-}
-
-function cutHomeCard(todayIso) {
-  const c = cfg();
-  const p = c.phase;
-  const wkNow = weekOf(todayIso, c);
-  const total = totalWeeks(c);
-  const title = todayIso < p.startDate ? `Cut starts ${fmtIso(p.startDate, { weekday: 'short' })}`
-    : todayIso === p.startDate ? 'Cut: baseline day'
-      : wkNow > total ? 'Cut finished' : `Cut · Week ${wkNow} of ${total}`;
-  const roll = rolling7(state.cut.weighins, c.rules.minWeighinsPerWeek).at(-1);
-  const out = [];
-  out.push(h('div', { class: 'card' },
-    h('h2', null, title),
-    h('p', { class: 'small muted', style: 'margin:4px 0 0' },
-      `Target ${currentTarget(state.cut)} kcal · Protein ${range2(c.proteinTargetG)} g · ${c.stepsTarget.toLocaleString()} steps`,
-      roll ? ` · 7-day avg ${fmtLb(roll.avg)}` : ''),
-    wkNow <= total ? weighinForm(todayIso) : null,
-    h('a', { class: 'linkish', href: '#/cut', style: 'display:inline-block;margin-top:8px' }, 'Progress ›')));
-  const n = checkinWeek(todayIso);
-  if (n >= 1 && ((isSunday(todayIso) && todayIso === weekRange(n, c).end) || pendingRec(n))) out.push(checkinCard(n));
-  return out;
-}
-
-function viewCut() {
-  const c = cfg();
-  const p = c.phase;
-  const todayIso = localIso();
-  const total = totalWeeks(c);
-  const root = h('div', null, topBar(p.name, { right: h('a', { class: 'icon-btn', href: '#/cut/settings', 'aria-label': 'Cut settings' }, '⚙') }));
-  const n = checkinWeek(todayIso);
-  if (n >= 1) root.append(checkinCard(n));
-
-  // Status tiles
-  const cp = nextCheckpoint(state.cut, todayIso);
-  const weeksLeft = Math.max(0, Math.ceil((dayNum(p.endDate) - dayNum(todayIso)) / 7));
-  const bfs = weighinList(state.cut.weighins).filter((w) => w.bodyfatPct != null);
-  const tiles = h('div', { class: 'tiles' },
-    h('div', { class: 'tile' }, h('b', null, `${currentTarget(state.cut)} kcal`), h('span', null, `Calorie target · start ${c.calories.startTargetKcal}, floor ${c.calories.floorKcal}`)),
-    h('div', { class: 'tile' }, h('b', null, `${range2(c.proteinTargetG)} g`), h('span', null, 'Protein target')),
-    h('div', { class: 'tile' }, h('b', null, `${weeksLeft}`), h('span', null, `Week${weeksLeft === 1 ? '' : 's'} remaining · ends ${fmtIso(p.endDate)}`)),
-    cp ? h('div', { class: 'tile' }, h('b', null, cp.name), h('span', null, `${fmtIso(cp.date)} · ≤ ${cp.maxWeightLb} lb, ≤ ${cp.maxWaistIn} in`)) : null,
-    ...(c.checkpoints || []).filter((x) => x.date <= todayIso).map((x) => {
-      const st = checkpointStatus(x, state.cut, todayIso);
-      const cls = st.status === 'pass' ? 'pass' : st.status === 'fail' ? 'fail' : '';
-      const label = st.status === 'pass' ? '✓ Pass' : st.status === 'fail' ? '✗ Fail' : 'No data';
-      return h('div', { class: 'tile' }, h('b', { class: cls }, `${x.name}: ${label}`),
-        h('span', null, `${fmtLb(st.weight)} (≤ ${x.maxWeightLb}) · ${st.waist == null ? '—' : `${fmtNum(st.waist)} in`} (≤ ${x.maxWaistIn})`));
-    }),
-    h('div', { class: 'tile' }, h('b', null, bfs.length ? `${fmtNum(bfs.at(-1).bodyfatPct)}%` : '—'), h('span', null, `Body fat (BIA, info only) · start ${p.startBodyfatPct}%`)));
-  root.append(tiles);
-
-  root.append(weightChartCard());
-  root.append(waistChartCard());
-  root.append(liftsCard());
-  root.append(weeksTable(Math.min(n, total)));
-
-  if (c.nextPhases?.length) {
-    root.append(h('h3', null, 'After the cut'), h('div', { class: 'card' }, c.nextPhases.map((ph) =>
-      h('p', { class: 'small', style: 'margin:0 0 6px' }, h('b', null, ph.name), ' · ',
-        Object.entries(ph).filter(([k]) => k !== 'name').map(([k, v]) => `${humanize(k)}: ${Array.isArray(v) ? range2(v) : v}`).join(' · ')))));
-  }
-
-  const list = weighinList(state.cut.weighins).reverse();
-  root.append(h('h3', null, 'Weigh-ins'),
-    list.length ? h('details', null, h('summary', { class: 'small muted' }, `${list.length} entr${list.length === 1 ? 'y' : 'ies'}`),
-      h('div', { class: 'card' }, list.map((w) => h('div', { class: 'row', style: 'justify-content:space-between;align-items:center;margin:4px 0' },
-        h('span', { class: 'small' }, `${fmtIso(w.date, { weekday: 'short' })} · ${fmtLb(w.weightLb)}`, w.bodyfatPct != null ? ` · ${w.bodyfatPct}%` : '', w.note ? ` · “${w.note}”` : ''),
-        h('button', { class: 'btn small danger', onclick: async () => {
-          if (!confirm(`Delete the ${fmtLb(w.weightLb)} weigh-in on ${fmtIso(w.date)}?`)) return;
-          delete state.cut.weighins[w.date];
-          await saveCut();
-          route();
-        } }, 'Delete')))))
-      : h('p', { class: 'muted small' }, 'No weigh-ins yet. Log one from the home screen.'));
-  return root;
-}
-
-function weightChartCard() {
-  const c = cfg();
-  const p = c.phase;
-  const x0 = dayNum(p.startDate);
-  const x1 = dayNum(p.endDate);
-  const weeks = (x1 - x0) / 7;
-  const list = weighinList(state.cut.weighins).filter((w) => w.date >= p.startDate && w.date <= p.endDate);
-  const roll = rolling7(state.cut.weighins, c.rules.minWeighinsPerWeek).filter((r) => r.date >= p.startDate && r.date <= p.endDate);
-  const byDay = new Map(list.map((w) => [dayNum(w.date), w.weightLb]));
-  const rollByDay = new Map(roll.map((r) => [dayNum(r.date), r.avg]));
-  const band = onTrackBand(weeks, c);
-  const chart = timeChart({
-    x0, x1, label: 'Weight chart: daily weigh-ins, 7-day average, target line and on-track band',
-    layers: [
-      { type: 'band', upper: [{ x: x0, y: p.startWeightLb }, { x: x1, y: band.hi }], lower: [{ x: x0, y: p.startWeightLb }, { x: x1, y: band.lo }] },
-      { type: 'line', cls: 'target', points: [{ x: x0, y: p.startWeightLb }, { x: x1, y: targetWeight(p.endDate, c) }] },
-      { type: 'dots', cls: 'dot faint', r: 2.5, points: list.map((w) => ({ x: dayNum(w.date), y: w.weightLb })) },
-      { type: 'line', points: roll.map((r) => ({ x: dayNum(r.date), y: r.avg })) },
-    ],
-    markers: (c.checkpoints || []).map((cp) => ({ x: dayNum(cp.date), label: cp.name })),
-    ticks: state.cut.holidays.map((hd) => ({ x: dayNum(hd.date) })),
-    readout: (x) => {
-      const iso = isoFromDayNum(x);
-      const hol = state.cut.holidays.find((hd) => hd.date === iso);
-      return [fmtIso(iso, { weekday: 'short' }),
-        byDay.has(x) ? `weigh-in ${fmtLb(byDay.get(x))}` : null,
-        rollByDay.has(x) ? `7-day ${fmtLb(rollByDay.get(x))}` : null,
-        `target ${fmtLb(targetWeight(iso, c))}`,
-        hol ? hol.label : null].filter(Boolean).join(' · ');
-    },
-  });
-  return h('div', { class: 'card' }, h('h2', null, 'Weight (lb)'), chart,
-    h('div', { class: 'legend' },
-      h('span', null, h('i', { class: 'dotk' }), 'Weigh-in'), h('span', null, h('i'), '7-day average'),
-      h('span', null, h('i', { class: 'dash' }), `Target ${p.targetRateLbPerWeek} lb/wk`),
-      h('span', null, h('i', { class: 'band' }), `On track ${range2(p.onTrackRateLbPerWeek)} lb/wk`),
-      h('span', null, h('i', { class: 'cp' }), 'Checkpoint'), h('span', null, h('i', { class: 'hol' }), 'Holiday')));
-}
-
-function waistChartCard() {
-  const p = cfg().phase;
-  const pts = Object.entries(state.cut.waist).sort(([a], [b]) => (a < b ? -1 : 1)).map(([d, w]) => ({ x: dayNum(d), y: w.waistIn }));
-  const all = [{ x: dayNum(p.startDate), y: p.startWaistIn }, ...pts.filter((q) => q.x > dayNum(p.startDate))];
-  const [g0, g1] = p.goalWaistIn;
-  return h('div', { class: 'card' }, h('h2', null, 'Waist (in)'),
-    timeChart({
-      x0: dayNum(p.startDate), x1: dayNum(p.endDate), height: 150, label: 'Waist chart with goal range',
-      layers: [{ type: 'yband', y0: g0, y1: g1 }, { type: 'line', points: all }, { type: 'dots', points: all, r: 3.5 }],
-      readout: (x) => {
-        const q = all.find((v) => Math.abs(v.x - x) <= 3);
-        return q ? `${fmtIso(isoFromDayNum(q.x), { weekday: 'short' })} · ${fmtNum(q.y)} in` : null;
-      },
-    }),
-    h('div', { class: 'legend' }, h('span', null, h('i'), 'Weekly waist (start, then Sundays)'), h('span', null, h('i', { class: 'band' }), `Goal ${range2(p.goalWaistIn)} in`)));
-}
-
-function liftsCard() {
-  const c = cfg();
-  const cat = exerciseCatalog(state.program, state.sessions);
-  const card = h('div', null, h('h3', null, 'Main lifts · best e1RM per week (lb)'));
-  if (!state.cut.mainLifts.length) {
-    card.append(h('p', { class: 'muted small' }, 'Pick 3-5 main lifts in ', h('a', { href: '#/cut/settings' }, 'cut settings'), ' to track strength.'));
-    return card;
-  }
-  const x0 = dayNum(c.phase.startDate);
-  const x1 = dayNum(c.phase.endDate);
-  card.append(h('div', { class: 'lifts' }, state.cut.mainLifts.map((id) => {
-    const by = bestE1rmByWeek(id, state.sessions, c);
-    const pts = [...by.entries()].sort((a, b) => a[0] - b[0]).map(([wk, v]) => ({ x: dayNum(weekRange(wk, c).end), y: v, wk }));
-    return h('div', { class: 'card' }, h('h3', null, cat.get(id) || id),
-      pts.length ? timeChart({
-        x0, x1, height: 130, width: 190, label: `${cat.get(id) || id} best estimated 1RM per week`,
-        layers: [{ type: 'line', points: pts }, { type: 'dots', points: pts, r: 3 }],
-        readout: (x) => {
-          const q = pts.find((v) => Math.abs(v.x - x) <= 3);
-          return q ? `Wk ${q.wk}: ${fmtNum(Math.round(q.y * 10) / 10)}` : null;
-        },
-      }) : h('p', { class: 'muted small' }, 'No sets of 1-12 reps yet.'));
-  })));
-  return card;
-}
-
-const STATUS_SHORT = { too_early: 'Too early', skipped: 'Skipped', conflict: 'Review', increase: '+kcal', decrease: '−kcal', floor: 'At floor', on_track: 'On track' };
-
-/** Table view of every completed week (doubles as the charts' accessible data). */
-function weeksTable(upTo) {
-  if (upTo < 1) return h('p', { class: 'muted small', style: 'margin-top:12px' }, 'Weekly results appear after week 1 ends.');
-  const rows = [];
-  for (let n = upTo; n >= 1; n--) {
-    const res = evaluateWeek(n, state.cut, state.sessions);
-    const acc = state.cut.calorieChanges.find((x) => x.week === n);
-    const st = res.status === 'skipped' ? (res.rule === 'holiday' ? 'Holiday' : 'Too few') : STATUS_SHORT[res.status];
-    rows.push(h('tr', null,
-      h('td', null, String(n)),
-      h('td', null, fmtLb(res.signal.stats.avg)),
-      h('td', null, String(res.signal.stats.count)),
-      h('td', null, fmtLoss(res.signal.loss)),
-      h('td', { title: res.reason }, acc ? `✓ ${acc.newKcal}` : st)));
-  }
-  return h('div', null, h('h3', null, 'Weeks'),
-    h('div', { class: 'card', style: 'overflow-x:auto' },
-      h('table', { class: 'weeks' },
-        h('thead', null, h('tr', null, ['Wk', 'Avg', 'n', 'Change', 'Result'].map((t) => h('th', null, t)))),
-        h('tbody', null, rows))));
-}
-
-// ---------- cut settings ----------
-
-const humanize = (k) => k.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())
-  .replace(/ Lb\b/, ' (lb)').replace(/ In\b/, ' (in)').replace(/ Kcal\b/, ' (kcal)').replace(/ Pct\b/, ' (%)').replace(/ G$/, ' (g)');
-
-/** Form fields for a config value, writing into `draft` at `path`. */
-function cfgField(draft, path, value) {
-  const set = (v) => { let o = draft; for (const k of path.slice(0, -1)) o = o[k]; o[path.at(-1)] = v; };
-  const key = path.at(-1);
-  const label = typeof key === 'number' ? null : humanize(key);
-  if (Array.isArray(value) && value.length && value.every((v) => v && typeof v === 'object')) {
-    return h('div', { class: 'cfg-group' }, label ? h('b', { class: 'small' }, label) : null,
-      value.map((item, i) => h('div', { class: 'card', style: 'margin-top:4px' }, cfgFields(draft, [...path, i], item))));
-  }
-  if (Array.isArray(value)) {
-    const inputs = value.map((v, i) => h('input', { class: 'field', type: 'text', inputmode: 'decimal', value: String(v), 'aria-label': `${label} ${i === 0 ? 'low' : 'high'}`,
-      oninput: (ev) => { const arr = [...(path.reduce((o, k) => o[k], draft))]; arr[i] = parseNum(ev.target.value); set(arr); } }));
-    return h('label', null, `${label} (low – high)`, h('div', { class: 'cfg-pair' }, inputs));
-  }
-  if (value && typeof value === 'object') {
-    return h('div', { class: 'cfg-group' }, h('b', { class: 'small' }, label), cfgFields(draft, path, value));
-  }
-  if (typeof value === 'number') {
-    return h('label', null, label, h('input', { class: 'field', type: 'text', inputmode: 'decimal', value: String(value), oninput: (ev) => set(parseNum(ev.target.value)) }));
-  }
-  const date = isValidIso(value);
-  return h('label', null, label, h('input', { class: 'field', type: date ? 'date' : 'text', value: value ?? '', oninput: (ev) => set(ev.target.value) }));
-}
-const cfgFields = (draft, path, obj) => Object.entries(obj).map(([k, v]) => cfgField(draft, [...path, k], v));
-
-function viewCutSettings() {
-  const root = h('div', null, topBar('Cut settings', { back: '#/cut' }));
-  const c = cfg();
-
-  // Main lifts: weighted exercises from the program and history.
-  const cat = exerciseCatalog(state.program, state.sessions);
-  const options = [...cat.entries()].filter(([id]) => !repsOnly(exerciseDef(id))).sort((a, b) => a[1].localeCompare(b[1]));
-  const chosen = new Set(state.cut.mainLifts);
-  root.append(h('h3', null, 'Main lifts'),
-    h('p', { class: 'muted small' }, `Pick 3-5 (${chosen.size} chosen). Strength checks use their best estimated 1RM each week, from sets of 1-12 reps.`),
-    h('div', { class: 'card' }, options.map(([id, name]) => h('label', { class: 'check' },
-      h('input', { type: 'checkbox', checked: chosen.has(id), disabled: !chosen.has(id) && chosen.size >= 5,
-        onchange: async (ev) => {
-          state.cut.mainLifts = ev.target.checked ? [...state.cut.mainLifts, id] : state.cut.mainLifts.filter((x) => x !== id);
-          await saveCut();
-          route();
-        } }),
-      name))));
-
-  // Holidays
-  const hDate = h('input', { class: 'field', type: 'date', value: localIso(), 'aria-label': 'Holiday date' });
-  const hLabel = h('input', { class: 'field', type: 'text', placeholder: 'Label, e.g. Thanksgiving', 'aria-label': 'Holiday label' });
-  root.append(h('h3', null, 'Holidays'),
-    h('p', { class: 'muted small' }, 'A week with a holiday is skipped by the rules. It doesn’t count toward or reset a streak.'),
-    h('div', { class: 'card' },
-      [...state.cut.holidays].sort((a, b) => (a.date < b.date ? -1 : 1)).map((hd) => h('div', { class: 'row', style: 'justify-content:space-between;align-items:center;margin-bottom:6px' },
-        h('span', null, `${fmtIso(hd.date, { weekday: 'short' })} · ${hd.label}`, h('span', { class: 'muted small' }, ` (week ${weekOf(hd.date, c)})`)),
-        h('button', { class: 'btn small danger', onclick: async () => {
-          state.cut.holidays = state.cut.holidays.filter((x) => x !== hd);
-          await saveCut();
-          route();
-        } }, 'Remove'))),
-      h('div', { class: 'cfg-group' }, hDate, hLabel,
-        h('button', { class: 'btn block', onclick: async () => {
-          if (!isValidIso(hDate.value)) { alert('Pick a date.'); return; }
-          const label = hLabel.value.trim() || 'Holiday';
-          state.cut.holidays = [...state.cut.holidays.filter((x) => x.date !== hDate.value), { date: hDate.value, label }];
-          await saveCut();
-          route();
-        } }, 'Add holiday'))));
-
-  // Calorie changes
-  const changes = state.cut.calorieChanges;
-  root.append(h('h3', null, 'Calorie target changes'),
-    h('div', { class: 'card' },
-      h('p', { class: 'small', style: 'margin:0' }, `Current target: ${currentTarget(state.cut)} kcal (start ${c.calories.startTargetKcal}).`),
-      changes.map((x) => h('p', { class: 'small muted', style: 'margin:4px 0 0' }, `${fmtIso(x.date)} · week ${x.week}: ${x.oldKcal} → ${x.newKcal} (${x.reason})`)),
-      changes.length ? h('button', { class: 'btn small', style: 'margin-top:8px', onclick: async () => {
-        const last = changes.at(-1);
-        if (!confirm(`Undo the change ${last.oldKcal} → ${last.newKcal} kcal from ${fmtIso(last.date)}?`)) return;
-        state.cut.calorieChanges = changes.slice(0, -1);
-        await saveCut();
-        route();
-      } }, 'Undo last change') : null));
-
-  // Plan values
-  const draft = structuredClone(c);
-  root.append(h('h3', null, 'Plan'),
-    h('div', { class: 'card form' }, cfgFields(draft, [], draft),
-      h('button', { class: 'btn primary block', onclick: async () => {
-        const errs = validateConfig(draft);
-        if (errs.length) { alert(errs.join('\n')); return; }
-        state.cut.config = draft;
-        await saveCut();
-        toast('Plan saved');
-        route();
-      } }, 'Save plan'),
-      h('button', { class: 'btn block', onclick: async () => {
-        if (!confirm('Reset all plan values to the defaults? Weigh-ins, waist, holidays and calorie changes are kept.')) return;
-        state.cut.config = mergeConfig(null);
-        await saveCut();
-        route();
-      } }, 'Reset plan to defaults')));
-  return root;
-}
-
 // ---------------------------------------------------------------- boot
 
 async function load() {
-  const [program, settings, sessions, cut] = await Promise.all([db.getKV('program'), db.getKV('settings'), db.getAllSessions(), db.getKV('cut')]);
-  state.cut = normalizeCut(cut);
+  const [program, settings, sessions] = await Promise.all([db.getKV('program'), db.getKV('settings'), db.getAllSessions()]);
   state.settings = { ...DEFAULT_SETTINGS, ...(settings || {}) };
   state.program = program || { ...structuredClone(SEED_PROGRAM), unit: 'lb', updatedAt: Date.now() };
   state.sessions = sessions || [];
@@ -1634,6 +1274,7 @@ async function applyProgramUpdates() {
       id,
       title: [prev?.title, ...titles].filter(Boolean).join(' + '),
       changes: [...(prev?.changes || []), ...changes],
+      undo: prev?.undo !== false && pending.every((u) => u.undo !== false),
     };
   }
   await saveSettings({ appliedUpdates: [...applied] });

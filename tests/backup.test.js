@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildExport, parseImport, planImport, toCSV, programsEqual, mergeCut } from '../app/js/backup.js';
-import { emptyCut } from '../app/js/cut.js';
+import { buildExport, parseImport, planImport, toCSV, programsEqual } from '../app/js/backup.js';
 import { SEED_PROGRAM, DEFAULT_SETTINGS } from '../app/js/seed.js';
 
 const session = (id, extra = {}) => ({
@@ -49,27 +48,25 @@ test('CSV: one row per performed set, escaped note', () => {
   assert.equal(lines[1], '2026-01-05,A,Leg press,1,100,12,"seat 4, ""high""",lb,0,gym');
 });
 
-// ---------- cut data ----------
+// ---------- older backups ----------
 
-test('export includes cut data and v1 files (no cut) still parse', () => {
-  const cut = { ...emptyCut(), weighins: { '2026-10-26': { weightLb: 173.4 } } };
-  const data = buildExport({ program: SEED_PROGRAM, settings: DEFAULT_SETTINGS, sessions: [], cut });
-  assert.equal(data.version, 2);
-  assert.deepEqual(parseImport(JSON.stringify(data)).cut, cut);
-  const v1 = { format: 'ab-gym-tracker', version: 1, program: SEED_PROGRAM, settings: DEFAULT_SETTINGS, sessions: [] };
-  assert.equal(parseImport(JSON.stringify(v1)).cut, undefined);
+test('v3 export: day sessions and programs validate, no cut', () => {
+  const data = buildExport({ program: SEED_PROGRAM, settings: DEFAULT_SETTINGS, sessions: [session('m', { day: 'armor', location: 'home' })] });
+  assert.equal(data.version, 3);
+  assert.equal('cut' in data, false);
+  const back = parseImport(JSON.stringify(data));
+  assert.equal(back.sessions[0].day, 'armor');
+  assert.equal(back.program.home.armor.length, SEED_PROGRAM.home.armor.length);
+  const bad = buildExport({ program: { ...SEED_PROGRAM, home: { ...SEED_PROGRAM.home, fri: 'nope' } }, settings: {}, sessions: [] });
+  assert.throws(() => parseImport(JSON.stringify(bad)), /program is malformed/);
+  assert.throws(() => parseImport(JSON.stringify({ ...data, sessions: [session('x', { day: 'sat' })] })), /malformed/);
 });
 
-test('mergeCut: adds missing entries, keeps mine on conflict unless replace', () => {
-  const mine = { ...emptyCut(), weighins: { '2026-10-26': { weightLb: 173 } }, holidays: [{ date: '2026-11-26', label: 'Thanksgiving' }] };
-  const theirs = { ...emptyCut(), weighins: { '2026-10-26': { weightLb: 172 }, '2026-10-27': { weightLb: 172.5 } }, holidays: [{ date: '2026-12-25', label: 'Christmas' }] };
-  const keep = mergeCut(mine, theirs);
-  assert.equal(keep.added, 2);
-  assert.equal(keep.conflicts, 1);
-  assert.equal(keep.cut.weighins['2026-10-26'].weightLb, 173);
-  assert.equal(keep.cut.weighins['2026-10-27'].weightLb, 172.5);
-  assert.deepEqual(keep.cut.holidays.map((x) => x.date), ['2026-11-26', '2026-12-25']);
-  const rep = mergeCut(mine, { ...theirs, mainLifts: ['leg_press'] }, { replace: true });
-  assert.equal(rep.cut.weighins['2026-10-26'].weightLb, 172);
-  assert.deepEqual(rep.cut.mainLifts, ['leg_press']);
+test('v2 backups (A/B program, cut data) still parse', () => {
+  const ab = { A: [{ id: 'leg_press', name: 'Leg press' }], B: [], home: { A: [], B: [] }, unit: 'lb' };
+  const v2 = { format: 'ab-gym-tracker', version: 2, program: ab, settings: DEFAULT_SETTINGS, sessions: [session('a')], cut: { weighins: {} } };
+  const back = parseImport(JSON.stringify(v2));
+  assert.equal(back.sessions.length, 1);
+  assert.equal(back.program.A.length, 1);
+  assert.ok(!programsEqual(back.program, SEED_PROGRAM));
 });

@@ -1,7 +1,7 @@
 // Pure workout logic: no DOM, no storage. Everything here is unit-tested.
 //
 // Session shape:
-// { id, day: 'A'|'B', startedAt, finishedAt|null, deload, unit: 'lb'|'kg',
+// { id, day: 'mon'|'wed'|'fri'|'armor' (older sessions: 'A'|'B'), location, startedAt, finishedAt|null, deload, unit: 'lb'|'kg',
 //   entries: [{ exerciseId, name, target: {...exercise}, sets: [{ weight, reps, done }], note }] }
 
 export const DAY = 24 * 60 * 60 * 1000;
@@ -10,23 +10,47 @@ export const DELOAD_AFTER_WEEKS = 6;
 export const BACKUP_REMIND_DAYS = 14;
 const KG_PER_LB = 0.45359237;
 
-export const otherDay = (day) => (day === 'A' ? 'B' : 'A');
+// ---------- weekly schedule ----------
+// Full body Mon/Wed/Fri; Armor (core, hips, right shoulder) on Tue and Thu.
+// Older sessions use the A/B days of the previous program; they keep their labels.
+export const DAYS = ['mon', 'wed', 'fri', 'armor'];
+export const LIFT_DAYS = ['mon', 'wed', 'fri'];
+const DAY_INFO = {
+  mon: { short: 'Mon', title: 'Monday' },
+  wed: { short: 'Wed', title: 'Wednesday' },
+  fri: { short: 'Fri', title: 'Friday' },
+  armor: { short: 'Armor', title: 'Armor' },
+};
+export const dayLabel = (day) => DAY_INFO[day]?.short ?? day;
+export const dayTitle = (day) => DAY_INFO[day]?.title ?? `Session ${day}`;
+// Date.getDay() → scheduled day
+const SCHEDULE = { 1: 'mon', 2: 'armor', 3: 'wed', 4: 'armor', 5: 'fri' };
 
 // ---------- program structure ----------
-// program = { A: Exercise[], B: Exercise[], home: { A: Exercise[], B: Exercise[] }, unit }
-// Gym days live at the top level (the original shape); home days under `home`.
+// program = { mon, wed, fri, armor: Exercise[], home: { mon, wed, fri, armor }, unit }
+// Gym days live at the top level; home days under `home`.
 // A session's `location` is 'gym' (or absent, for older sessions) or 'home'.
+//
+// Exercise fields: id, name, cue, increment, load flags (perHand | bodyweight |
+// band | notch), perSide, measure ('time' = seconds, 'distance' = meters,
+// absent = reps), plus the per-day prescription in SLOT_KEYS. `group` pairs
+// exercises: the same letter on one day means alternate their sets (A1, A2).
 
-export const SLOTS = [['gym', 'A'], ['gym', 'B'], ['home', 'A'], ['home', 'B']];
+export const SLOTS = ['gym', 'home'].flatMap((loc) => DAYS.map((day) => [loc, day]));
+export const SLOT_KEYS = ['sets', 'repMin', 'repMax', 'restSec', 'group'];
 export const locationOf = (session) => (session?.location === 'home' ? 'home' : 'gym');
-export const slotName = (day, location) => (location === 'home' ? `Home ${day}` : `Gym ${day}`);
+export const slotName = (day, location) => `${location === 'home' ? 'Home' : 'Gym'} ${dayLabel(day)}`;
+/** A program in the current day layout (older backups use A/B). */
+export const isDayProgram = (p) => !!p && DAYS.every((d) => Array.isArray(p[d]));
 
 export function programList(program, day, location = 'gym') {
   return (location === 'home' ? program?.home?.[day] : program?.[day]) || [];
 }
 
 export function withProgramList(program, day, location, list) {
-  if (location === 'home') return { ...program, home: { A: [], B: [], ...(program.home || {}), [day]: list } };
+  if (location === 'home') {
+    return { ...program, home: { ...Object.fromEntries(DAYS.map((d) => [d, []])), ...(program.home || {}), [day]: list } };
+  }
   return { ...program, [day]: list };
 }
 
@@ -34,18 +58,64 @@ export function allProgramExercises(program) {
   return SLOTS.flatMap(([loc, day]) => programList(program, day, loc));
 }
 
-/** Replace every program occurrence of exercise `id` (shared exercises stay in sync). */
-export function updateEverywhere(program, id, ex) {
+/**
+ * Update every program occurrence of exercise `id`. Name, cue and load are
+ * shared, so they change everywhere; sets, reps, rest and pair (SLOT_KEYS)
+ * belong to each day and change only in `slot` ([location, day]), if given.
+ */
+export function updateEverywhere(program, id, ex, slot = null) {
   let p = program;
   for (const [loc, day] of SLOTS) {
     const list = programList(p, day, loc);
-    if (list.some((x) => x.id === id)) p = withProgramList(p, day, loc, list.map((x) => (x.id === id ? { ...ex } : x)));
+    if (!list.some((x) => x.id === id)) continue;
+    const here = slot && slot[0] === loc && slot[1] === day;
+    p = withProgramList(p, day, loc, list.map((x) => {
+      if (x.id !== id) return x;
+      const out = { ...ex };
+      if (!here) for (const k of SLOT_KEYS) { if (x[k] === undefined) delete out[k]; else out[k] = x[k]; }
+      return out;
+    }));
   }
   return p;
 }
 
 /** Bodyweight and band exercises log reps only. */
 export const repsOnly = (ex) => !!(ex && (ex.bodyweight || ex.band));
+/** Loads with no weight increment: reps-only, or a bar height (notch). */
+export const noIncrement = (ex) => repsOnly(ex) || !!ex?.notch;
+
+/** Pair labels for a list of exercises: 'A1', 'A2' in a pair, 'C' alone in its group, null without one. */
+export function pairLabels(list) {
+  const total = {};
+  const seen = {};
+  for (const ex of list) if (ex?.group) total[ex.group] = (total[ex.group] || 0) + 1;
+  return list.map((ex) => {
+    const g = ex?.group;
+    if (!g) return null;
+    seen[g] = (seen[g] || 0) + 1;
+    return total[g] > 1 ? `${g}${seen[g]}` : g;
+  });
+}
+
+/**
+ * After a set of entry `i`, which entry is next: the other exercise(s) of its
+ * pair in turn, then the first later entry with sets left. null when done or
+ * when the entry isn't paired.
+ */
+export function nextUp(entries, i) {
+  const g = entries[i]?.target?.group;
+  if (!g) return null;
+  const open = (j) => entries[j].sets.some((s) => !s.done);
+  const members = entries.map((e, j) => (e.target?.group === g ? j : -1)).filter((j) => j >= 0);
+  if (members.length < 2) return null;
+  const at = members.indexOf(i);
+  for (let k = 1; k <= members.length; k++) {
+    const j = members[(at + k) % members.length];
+    if (open(j)) return j;
+  }
+  for (let j = members[members.length - 1] + 1; j < entries.length; j++) if (open(j)) return j;
+  return null;
+}
 export const isFinished = (s) => !!(s && s.finishedAt);
 
 export function uid() {
@@ -74,21 +144,32 @@ function byStartDesc(a, b) {
   return (b.startedAt || 0) - (a.startedAt || 0);
 }
 
-/** Which session is next: the opposite of the last completed one (A if none). */
-export function nextDay(sessions) {
-  const done = sessions.filter(isFinished).sort((a, b) => b.finishedAt - a.finishedAt);
-  return done.length ? otherDay(done[0].day) : 'A';
+/**
+ * Which day to offer: today's scheduled day (Mon/Wed/Fri lifting, Tue/Thu
+ * Armor) unless it's already done today; otherwise the first lifting day not
+ * done this week (Mon-Sun), else Armor.
+ */
+export function nextDay(sessions, now = Date.now()) {
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const done = sessions.filter(isFinished);
+  const doneToday = new Set(done.filter((s) => s.finishedAt >= midnight.getTime()).map((s) => s.day));
+  const doneWeek = new Set(done.filter((s) => s.finishedAt >= weekStart(now)).map((s) => s.day));
+  const scheduled = SCHEDULE[new Date(now).getDay()];
+  if (scheduled && !doneToday.has(scheduled)) return scheduled;
+  return LIFT_DAYS.find((d) => !doneWeek.has(d)) || 'armor';
 }
 
 /**
  * Most recent finished performance of an exercise.
- * opts: { before: ms, excludeId, skipDeload, units } — when `units` is given,
- * weights are converted into it.
+ * opts: { before: ms, excludeId, skipDeload, units, day } — when `units` is
+ * given, weights are converted into it; `day` limits it to sessions of that day.
  */
 export function lastPerformance(exerciseId, sessions, opts = {}) {
-  const { before, excludeId, skipDeload, units } = opts;
+  const { before, excludeId, skipDeload, units, day } = opts;
   const list = sessions
     .filter(isFinished)
+    .filter((s) => day == null || s.day === day)
     .filter((s) => s.id !== excludeId)
     .filter((s) => before == null || s.startedAt < before)
     .filter((s) => !(skipDeload && s.deload))
@@ -112,6 +193,16 @@ export function lastPerformance(exerciseId, sessions, opts = {}) {
     };
   }
   return null;
+}
+
+/**
+ * Last performance to show and progress from: the most recent on the same day
+ * when there is one (an exercise can be heavy on Monday and light on Friday),
+ * otherwise the most recent on any day.
+ */
+export function lastFor(exerciseId, sessions, opts = {}) {
+  const { day, ...rest } = opts;
+  return (day && lastPerformance(exerciseId, sessions, { ...rest, day })) || lastPerformance(exerciseId, sessions, rest);
 }
 
 /** Most recent non-empty note for an exercise. */
@@ -138,24 +229,27 @@ export function topWeight(sets) {
  * Double progression. If every set last time (excluding deload sessions) hit
  * repMax, and at least the programmed number of sets was done, suggest
  * top weight + increment. Otherwise suggest the same weight.
- * Returns { weight, increase, lastWeight, last } — weight is null if there is
- * no history or the exercise is reps-only (bodyweight/band). For a band
- * exercise, `increase` means "move to a stronger band".
+ * Returns { weight, increase, hitTop, lastWeight, last } — weight is null if
+ * there is no history or the exercise is reps-only (bodyweight/band). For a
+ * band exercise, `increase` means "move to a stronger band". `hitTop` is the
+ * rule alone, for loads without an increment (notch, bodyweight).
+ * opts.day prefers history from that day (see lastFor).
  */
 export function suggestWeight(exercise, sessions, opts = {}) {
   const units = opts.units || 'lb';
-  const last = lastPerformance(exercise.id, sessions, { ...opts, units, skipDeload: true });
-  if (!last) return { weight: null, increase: false, lastWeight: null, last };
+  const last = lastFor(exercise.id, sessions, { ...opts, units, skipDeload: true });
+  if (!last) return { weight: null, increase: false, hitTop: false, lastWeight: null, last };
   const hitTop =
     last.sets.length >= exercise.sets && last.sets.every((s) => s.reps >= exercise.repMax);
   // Bands: no weight, but flag "use a stronger band" on the same rule.
-  if (repsOnly(exercise)) return { weight: null, increase: hitTop && !!exercise.band, lastWeight: null, last };
+  if (repsOnly(exercise)) return { weight: null, increase: hitTop && !!exercise.band, hitTop, lastWeight: null, last };
   const lastWeight = topWeight(last.sets);
-  if (lastWeight == null) return { weight: null, increase: false, lastWeight: null, last };
+  if (lastWeight == null) return { weight: null, increase: false, hitTop, lastWeight: null, last };
   const increase = hitTop && exercise.increment > 0;
   return {
     weight: clean(increase ? lastWeight + exercise.increment : lastWeight),
     increase,
+    hitTop,
     lastWeight,
     last,
   };
@@ -184,7 +278,7 @@ export function targetSets(exercise, deload) {
 export function makeEntry(ex, sessions, opts = {}) {
   const units = opts.units || 'lb';
   const n = targetSets(ex, !!opts.deload);
-  const weights = prefillWeights(ex, sessions, n, { units });
+  const weights = prefillWeights(ex, sessions, n, { units, day: opts.day });
   return {
     exerciseId: ex.id,
     name: ex.name,
@@ -208,7 +302,7 @@ export function newSession(day, program, sessions, opts = {}) {
     finishedAt: null,
     deload,
     unit: units,
-    entries: programList(program, day, location).map((ex) => makeEntry(ex, sessions, { units, deload })),
+    entries: programList(program, day, location).map((ex) => makeEntry(ex, sessions, { units, deload, day })),
   };
 }
 
@@ -221,7 +315,7 @@ const entryHasData = (e) => e.sets.some((s) => Number(s.reps) > 0 || s.done) || 
  * index is the position of the new entry.
  */
 export function swapEntry(session, index, ex, sessions) {
-  const entry = makeEntry(ex, sessions, { units: session.unit, deload: session.deload });
+  const entry = makeEntry(ex, sessions, { units: session.unit, deload: session.deload, day: session.day });
   const entries = [...session.entries];
   if (entryHasData(entries[index])) {
     entries.splice(index + 1, 0, entry);
@@ -289,9 +383,10 @@ export function weekStart(now = Date.now()) {
   return d.getTime();
 }
 
-export function sessionsThisWeek(sessions, now = Date.now()) {
+/** Finished sessions since Monday, optionally only of the given days. */
+export function sessionsThisWeek(sessions, now = Date.now(), days = null) {
   const start = weekStart(now);
-  return sessions.filter((s) => isFinished(s) && s.finishedAt >= start && s.finishedAt <= now).length;
+  return sessions.filter((s) => isFinished(s) && s.finishedAt >= start && s.finishedAt <= now && (!days || days.includes(s.day))).length;
 }
 
 export function lastWorkout(sessions) {
@@ -366,26 +461,31 @@ export function fmtNum(n) {
   return String(clean(Number(n)));
 }
 
-/** "90 lb — 12, 11, 10" or "90 lb × 12, 11 · 85 lb × 10" */
+/** ' s' for timed holds, ' m' for carries, '' for reps. */
+export const measureUnit = (ex) => (ex?.measure === 'time' ? ' s' : ex?.measure === 'distance' ? ' m' : '');
+
+/** "90 lb — 12, 11, 10", "90 lb × 12, 11 · 85 lb × 10", "30, 30 s/side", "notch 14 — 15, 15" */
 export function formatSets(sets, unit, ex = {}) {
   if (!sets?.length) return '';
   const side = ex.perSide ? '/side' : '';
+  const mu = measureUnit(ex);
   if (ex.perHand) unit = `${unit} ea`;
   if (repsOnly(ex) || sets.every((s) => s.weight == null)) {
-    return sets.map((s) => s.reps).join(', ') + (side ? ' /side' : ' reps');
+    return sets.map((s) => s.reps).join(', ') + (mu ? mu + side : side ? ' /side' : ' reps');
   }
+  const load = (w) => (w == null ? 'BW' : ex.notch ? `notch ${fmtNum(w)}` : `${fmtNum(w)} ${unit}`);
   const groups = [];
   for (const s of sets) {
     const g = groups[groups.length - 1];
     if (g && g.weight === s.weight) g.reps.push(s.reps);
     else groups.push({ weight: s.weight, reps: [s.reps] });
   }
-  if (groups.length === 1) return `${fmtNum(groups[0].weight)} ${unit} — ${groups[0].reps.join(', ')}${side}`;
-  return groups.map((g) => `${g.weight == null ? 'BW' : fmtNum(g.weight) + ' ' + unit} × ${g.reps.join(', ')}`).join(' · ') + side;
+  if (groups.length === 1) return `${load(groups[0].weight)} — ${groups[0].reps.join(', ')}${mu}${side}`;
+  return groups.map((g) => `${load(g.weight)} × ${g.reps.join(', ')}`).join(' · ') + mu + side;
 }
 
 export function formatTarget(exercise, deload) {
   const n = targetSets(exercise, deload);
   const reps = exercise.repMin === exercise.repMax ? `${exercise.repMax}` : `${exercise.repMin}–${exercise.repMax}`;
-  return `${n} × ${reps}${exercise.perSide ? '/side' : ''}`;
+  return `${n} × ${reps}${measureUnit(exercise)}${exercise.perSide ? '/side' : ''}`;
 }

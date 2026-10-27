@@ -1,7 +1,7 @@
 {
   "name": "A/B Gym Tracker",
   "short_name": "Gym",
-  "description": "Offline A/B machine split workout log",
+  "description": "Offline full-body workout log",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

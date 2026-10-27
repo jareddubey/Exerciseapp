@@ -1,6 +1,6 @@
-# A/B Gym Tracker
+# Gym Tracker
 
-An offline-first web app for logging an A/B machine split on your phone. It shows last session's numbers, prefills weights, suggests when to add weight (double progression), and runs a rest timer. Data stays on the device in IndexedDB. There are no accounts, no backend, and no tracking.
+An offline-first web app for logging a 3-day full-body program (Mon/Wed/Fri) plus a Tue/Thu "Armor" day (core, hips, shoulder) on your phone. It shows last session's numbers, prefills weights, suggests when to add weight (double progression), and runs a rest timer that walks you through paired exercises. Data stays on the device in IndexedDB. There are no accounts, no backend, and no tracking.
 
 ## Stack
 
@@ -17,15 +17,13 @@ app/                    ← the deployable static site
   css/app.css
   js/seed.js            default program (gym + home) + settings
   js/updates.js         one-time program updates for existing installs
-  js/cut-config.js      fat-loss phase plan: every number the cut module uses
-  js/cut.js             pure cut logic: week math, averages, e1RM, Sunday rule engine, checkpoints
-  js/logic.js           pure logic: nextDay, suggestWeight, lastPerformance, deloadStatus, …
+  js/logic.js           pure logic: nextDay, suggestWeight, pairs, deloadStatus, …
   js/backup.js          pure export/import planning + CSV
   js/db.js              IndexedDB wrapper
   js/chart.js           tiny inline-SVG line chart
   js/app.js             UI, router, rest timer, wake lock
   icons/
-tests/                  unit tests for logic.js and backup.js
+tests/                  unit tests for logic, program, updates and backup
 scripts/make-icons.mjs  regenerates PNG icons from icons/icon.svg (Playwright)
 .github/workflows/pages.yml
 ```
@@ -68,43 +66,27 @@ iOS can delete website data for sites that go unused. Installing to the Home Scr
 
 ## How it works
 
-- **Gym or Home**: a toggle on the start screen picks where you're training. Home A/B work the same muscle groups as gym A/B with dumbbells, a pull-up bar, bands and an incline bench. Home sessions count in the same A/B rotation. Home exercises have their own ids, so their history and progression are separate from the gym; exercises that are truly the same (dead bug) share an id. Edit the home days under **Program → Home**.
-- **Load types**: each exercise is *Weight*, *Dumbbells* (logged per hand, shown as "lb ea"), *Bodyweight* (reps only) or *Band* (reps only; note the band in the exercise note). A band exercise shows **↑ Stronger band** once every set reaches the top of the rep range.
-- **Program updates**: changes to the default program ship as one-time updates (`app/js/updates.js`) that run on launch, work by exercise id so your own edits are kept, and show a home-screen notice with **Undo**.
-- **Next session**: the opposite of the last finished one, which gives A/B/A then B/A/B. The home screen also lets you start the other day.
-- **Prefill**: each set's weight comes from last time. Reps stay blank; the greyed placeholder shows last time's reps. The first tap on − or + fills that number in.
+- **Days**: Mon, Wed and Fri are full body; Armor (Copenhagen plank, bird dog, side plank, dead bug, right-shoulder superset, suitcase carry, push-up plus, hip mobility) is for Tue and Thu, followed by Zone 2 cardio. Lifting days open with a warm-up note.
+- **Next session**: today's scheduled day. If it's already done today, or on a weekend, the first lifting day not yet done this week (Mon-Sun), else Armor. The home screen also lets you start any other day. Sessions from the old A/B program keep their A/B labels in history.
+- **Pairs**: exercises with the same pair letter on a day (A1, A2) alternate sets and are grouped together in the session. Each exercise's rest is the rest *after* it, before the next one, so A1 → short rest → A2 → longer rest → A1. The rest timer names what's next and moves on to the next pair when one is finished. Set the letter under **Program → Edit → Pair letter**.
+- **Gym or Home**: a toggle on the start screen picks where you're training. Home Mon/Wed/Fri work the same patterns with dumbbells, a pull-up bar, bands and an incline bench; Armor is the same in both places. Home exercises have their own ids, so their history and progression are separate from the gym; exercises that are truly the same (lateral raise, push-up, Armor) share an id. Edit the home days under **Program → Home**.
+- **Load types**: each exercise is *Weight*, *Dumbbells* (logged per hand, shown as "lb ea"), *Bodyweight* or *Band* (no weight; note the band in the exercise note), or *Bar height* (the weight column holds the notch, e.g. incline push-ups). When every set reaches the top of the range, a band shows **↑ Stronger band**, a bar height **↓ Lower the bar a notch**, and a bodyweight exercise with a range **↑ Harder variation**.
+- **Reps, seconds or meters**: each exercise counts reps, seconds (holds such as side plank) or meters (carries). The −/+ buttons move seconds and meters by 5.
+- **Program updates**: changes to the default program ship as one-time updates (`app/js/updates.js`) that run on launch and show a home-screen notice. Small updates work by exercise id and offer **Undo**; the 3-day redesign replaced the A/B program and has no Undo.
+- **Prefill**: each set's weight comes from last time on the same day if there is one (hack squat is heavy on Monday and lighter on Friday), otherwise from the latest session of any day. Reps stay blank; the greyed placeholder shows last time's reps. The first tap on − or + fills that number in.
 - **Double progression**: if every set last time reached `repMax` (with at least the programmed number of sets), weights prefill at `+increment` and an **↑ Add 5 lb** badge appears. Deload sessions don't count as the basis. It's only a prefill, so you can always change it.
 - **Weight stepper**: the card's −/+ changes all *unticked* sets. Typing a weight in one set carries it to later unticked sets that had the same value.
-- **Shared exercises**: exercises with the same `id` share history and progression. For example, `biceps_curl` appears in both A and B. In the program editor, add an exercise from the *Exercise* dropdown to reuse it on the other day.
+- **Shared exercises**: exercises with the same `id` share history. Name, cue and load are the same everywhere; sets, rep range, rest and pair belong to each day, so editing them on Monday leaves Friday alone. In the program editor, add an exercise from the *Exercise* dropdown to reuse it on another day.
 - **Swap vs. rename**: *Edit* keeps the id, so history continues. *Swap* creates a new exercise, and the old history stays under the old id.
 - **Swap mid-workout**: each exercise card has **⇄ Swap**. Pick a known exercise or enter a new one. It applies to this workout only, unless you tick *Also replace it in the program*. An untouched exercise is replaced in place. One that already has logged sets is kept, and the new one is added after it.
-- **Edit mid-workout**: each exercise card has **✎ Edit** to change its name, cue, load type, sets, rep range, rest, increment and reps-per-side. It keeps the same id, so history and progression continue. It applies to this workout only, unless you tick *Also save to the program*, which updates every day the exercise appears on. Lowering sets removes only empty sets from the end; sets with reps or a tick are kept. In a deload session the Sets field is today's count, and the program gets one more.
+- **Edit mid-workout**: each exercise card has **✎ Edit** to change its name, cue, load type, sets, rep range, rest, increment and reps-per-side. It keeps the same id, so history and progression continue. It applies to this workout only, unless you tick *Also save to the program*: name, cue and load change on every day the exercise appears on, sets, reps and rest on this day only. Lowering sets removes only empty sets from the end; sets with reps or a tick are kept. In a deload session the Sets field is today's count, and the program gets one more.
 - **Deload**: after 6 weeks (counted from the last deload, or from your first session), a banner offers *Start deload week* (7 days, one set less per exercise) or *Deload done* (resets the counter).
 - **Autosave**: every input is saved as you type. An unfinished session reopens where you left it, including the rest timer and scroll position.
 - **Rest timer**: ticking a set starts it. It vibrates where supported (not on iOS), beeps (optional; iOS mutes it with the silent switch), and flashes the bar. While a session is open, Screen Wake Lock keeps the display on where supported.
 - **Units**: lb by default; switch to kg in settings. Each session records its unit and is converted for display and suggestions. Program increments convert too (5 lb ↔ 2.5 kg).
 
-## Cut tracking
-
-A 12-week fat-loss phase module. It **recommends** calorie changes every Sunday from fixed rules; it never changes the target until you tap **Accept**.
-
-- **Plan**: all numbers live in `app/js/cut-config.js` (`DEFAULT_CUT_CONFIG`). The device keeps an edited copy (Settings → Cut plan); missing keys fall back to the defaults.
-- **Logging**: daily weigh-in on the home screen (one per date; a second entry asks before replacing), optional body fat % (display only, never used by rules) and note. Waist on the Sunday check-in, two readings averaged. Holidays and 3-5 main lifts under cut settings. Main lifts reuse your logged workout sets; no separate lift log.
-- **Weeks**: week N is the Mon-Sun ending on the Nth Sunday after the start date. Dates are stored as local `YYYY-MM-DD` days, so DST can't move a weigh-in between weeks.
-- **Rules** (`evaluateWeek` in `cut.js`), from week `firstRuleWeek` on, over this week plus the previous non-skipped week(s):
-  1. Skip a week with a holiday or fewer than `minWeighinsPerWeek` weigh-ins. It neither counts toward nor resets a streak.
-  2. Slow loss (< 0.5 lb/wk) both weeks and main lifts down this week → no change, review sleep/recovery/intake.
-  3. Loss > 1.25 lb/wk or main lifts down, both weeks → +150 kcal.
-  4. Slow loss both weeks → −150 kcal, unless that goes below the floor ("At calorie floor: review plan").
-  5. Otherwise on track.
-  Only weeks ≥ `firstRuleWeek` count toward a streak, so the earliest recommendation is week 4. Accepting resets the streaks; dismissing doesn't.
-- **Strength**: Epley e1RM `weight × (1 + reps/30)` from sets of 1-12 reps, kg sessions converted to lb. A lift is down when its best e1RM is more than 2% below the previous week's; main lifts are down when more than half of those trained in both weeks are.
-- **Weekly change** is the previous week's average minus this week's (week 1 vs the start weight). If the previous week has too few weigh-ins, the last full week is used, divided by the weeks between.
-- **Checkpoints** pass when that week's average weight and that Sunday's waist (or the latest in the 7 days before) are both at or under the max.
-- **Dashboard** (`#/cut`): weight chart (daily dots, 7-day average shown with 4+ entries in the window, dashed target line, shaded on-track band, checkpoints, holidays), waist chart with goal range, best e1RM per week per main lift, status tiles, and a weekly table. Tap or drag a chart to read values.
-
 ## Backup format
 
-The JSON export holds `{ format: "ab-gym-tracker", version: 2, exportedAt, program, settings, sessions, cut }`. Version 1 files (no `cut`) still import. Cut entries missing on this device are added; entries that differ, and a different plan or main-lift list, are only replaced if you confirm. Import merges by session id: new sessions are added; sessions that already exist with different content are only replaced if you confirm; a different program is only applied if you confirm.
+The JSON export holds `{ format: "ab-gym-tracker", version: 3, exportedAt, program, settings, sessions }`. Version 1 and 2 files still import: their sessions merge as usual, a `cut` record (from the removed cut tracker) is ignored, and an old A/B program is not applied. Import merges by session id: new sessions are added; sessions that already exist with different content are only replaced if you confirm; a different program is only applied if you confirm.
 
 The CSV export has columns `date, session, exercise, set, weight, reps, note, unit, deload, location`.
