@@ -249,8 +249,7 @@ h3 { font-size: 15px; margin: 20px 0 8px; color: var(--muted); text-transform: u
 .sw-hub { fill: var(--text); }
 .sw-num { fill: var(--muted); font-size: 9px; font-weight: 700; text-anchor: middle; font-variant-numeric: tabular-nums; }
 .stopwatch.running .sw-num { fill: var(--text); }
-.stopwatch.done .sw-face { animation: sw-flash .5s steps(1) 6; }
-.stopwatch.done .sw-arc { stroke: var(--accent-text); }
+.stopwatch.flash .sw-face { animation: sw-flash .5s steps(1) 6; }
 @keyframes sw-flash { 50% { fill: var(--flash); } }
 
 /* ---------- forms ---------- */

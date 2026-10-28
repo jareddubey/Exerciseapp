@@ -241,17 +241,19 @@ const rest = (() => {
 
 // ---------------------------------------------------------------- hold stopwatch
 
-// A 60-second analog stopwatch in the session header for timing holds. Tap to
-// start, tap to stop, tap again to reset. One beep at 30 s; at 60 s it beeps,
-// vibrates and stops.
+// An analog stopwatch in the session header for timing holds (the rest timer
+// handles rests). Tap to start or pause, double-tap to reset to 0. The hand
+// laps the 60-s dial; one beep at 30 s, three at 60 s.
 const stopwatch = (() => {
   const R = 19;
   const C = 2 * Math.PI * R;
+  const DOUBLE_TAP_MS = 300;
   let startAt = null; // running since
-  let shown = 0; // seconds on the dial while stopped
-  let beeped30 = false;
+  let banked = 0; // seconds from earlier runs, before a pause
+  let prevSec = 0;
   let raf = 0;
   let lastSec = -1;
+  let lastTap = 0;
   const svg = (tag, attrs) => {
     const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -270,51 +272,51 @@ const stopwatch = (() => {
   face.append(num, hand, svg('circle', { cx: 22, cy: 22, r: 2, class: 'sw-hub' }));
   const el = h('button', { class: 'stopwatch', type: 'button', onclick: tap }, face);
 
-  const elapsed = () => (startAt == null ? shown : Math.min(60, (Date.now() - startAt) / 1000));
+  const elapsed = () => banked + (startAt == null ? 0 : (Date.now() - startAt) / 1000);
   function paint() {
     const sec = elapsed();
-    hand.setAttribute('transform', `rotate(${sec * 6} 22 22)`);
-    arc.setAttribute('stroke-dasharray', `${(C * sec) / 60} ${C}`);
+    const lap = sec % 60;
+    hand.setAttribute('transform', `rotate(${lap * 6} 22 22)`);
+    arc.setAttribute('stroke-dasharray', `${(C * lap) / 60} ${C}`);
     const whole = Math.floor(sec);
     if (whole === lastSec) return;
     lastSec = whole;
     num.textContent = whole || '';
-    const what = startAt != null ? 'running, tap to stop' : shown ? 'stopped, tap to reset' : 'tap to start';
-    el.setAttribute('aria-label', `Hold stopwatch: ${whole} s, ${what}`);
+    const what = startAt != null ? 'running' : whole ? 'paused' : 'ready';
+    el.setAttribute('aria-label', `Hold stopwatch: ${whole} s, ${what}. Tap to start or pause, double-tap to reset.`);
+  }
+  // Beep as the hold passes 30 s and 60 s, but not late (app in the background).
+  function marks(sec) {
+    for (const [at, n] of [[30, 1], [60, 3]]) {
+      if (prevSec < at && sec >= at && sec - at < 2) {
+        rest.beep(n);
+        navigator.vibrate?.(n === 1 ? 150 : [300, 120, 300]);
+        if (at === 60) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+      }
+    }
+    prevSec = sec;
   }
   function frame() {
     paint();
     if (startAt == null) return;
-    const ms = Date.now() - startAt;
-    // No sound when the app was in the background past the mark.
-    if (ms >= 30_000 && !beeped30) {
-      beeped30 = true;
-      if (ms < 32_000) { rest.beep(1); navigator.vibrate?.(150); }
-    }
-    if (ms >= 60_000) {
-      shown = 60;
-      startAt = null;
-      if (ms < 62_000) { rest.beep(3); navigator.vibrate?.([300, 120, 300]); }
-      el.classList.remove('running');
-      el.classList.add('done');
-      lastSec = -1;
-      paint();
-      return;
-    }
+    marks(elapsed());
     raf = requestAnimationFrame(frame);
   }
   function tap() {
     rest.unlockAudio();
     cancelAnimationFrame(raf);
-    el.classList.remove('done');
-    if (startAt != null) {
-      shown = elapsed();
+    const now = Date.now();
+    if (now - lastTap < DOUBLE_TAP_MS) {
+      // double tap: the first tap's start or pause is undone by the reset
+      lastTap = 0;
       startAt = null;
-    } else if (shown) {
-      shown = 0;
+      banked = 0;
+      prevSec = 0;
+      el.classList.remove('flash');
     } else {
-      startAt = Date.now();
-      beeped30 = false;
+      lastTap = now;
+      if (startAt != null) { banked = elapsed(); startAt = null; } else startAt = now;
+      prevSec = elapsed();
     }
     el.classList.toggle('running', startAt != null);
     lastSec = -1;
