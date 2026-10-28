@@ -6,8 +6,9 @@ import {
   performedSets, exerciseCatalog, exerciseHistory, convertProgramUnits, makeExerciseId, clean, DAY,
   swapEntry, editEntry, programList, withProgramList, allProgramExercises, updateEverywhere, repsOnly, noIncrement, locationOf,
   slotName, SLOTS, DAYS, LIFT_DAYS, dayLabel, dayTitle, pairLabels, nextUp, isDayProgram,
+  uid, addSavedProgram, programFromSaved, notesFor,
 } from './logic.js';
-import { buildExport, parseImport, planImport, programsEqual, toCSV } from './backup.js';
+import { buildExport, parseImport, planImport, programsEqual, mergeSavedPrograms, toCSV } from './backup.js';
 import { lineChart } from './chart.js';
 import { PROGRAM_UPDATES } from './updates.js';
 
@@ -64,6 +65,7 @@ const units = () => state.settings.units;
 const currentLocation = () => (state.program?.home && state.settings.location === 'home' ? 'home' : 'gym');
 // Program definition of an exercise id, from any gym/home day.
 const programDef = (id) => allProgramExercises(state.program).find((x) => x.id === id);
+const dayNotes = (day) => notesFor(state.program, day, DAY_NOTES);
 
 // ---------------------------------------------------------------- persistence
 
@@ -513,8 +515,8 @@ function viewSession(session) {
     live ? stopwatch.el : null);
 
   const root = h('div', { class: 'session' }, header);
-  if (live && DAY_NOTES[session.day]) {
-    root.append(h('div', { class: 'day-note' }, DAY_NOTES[session.day].map((t) => h('p', null, t))));
+  if (live && dayNotes(session.day).length) {
+    root.append(h('div', { class: 'day-note' }, dayNotes(session.day).map((t) => h('p', null, t))));
   }
   // Paired exercises (A1, A2) sit together in one bordered group.
   const labels = pairLabels(session.entries.map((e) => e.target || {}));
@@ -1026,7 +1028,7 @@ function viewProgram(loc, day) {
         h('button', { 'aria-pressed': String(l === loc), onclick: nav(l, day) }, label))),
     h('div', { class: 'seg', role: 'group', 'aria-label': 'Day', style: 'margin-top:8px' },
       DAYS.map((d) => h('button', { 'aria-pressed': String(d === day), onclick: nav(loc, d) }, dayLabel(d)))));
-  if (DAY_NOTES[day]) root.append(h('div', { class: 'day-note' }, DAY_NOTES[day].map((t) => h('p', null, t))));
+  if (dayNotes(day).length) root.append(h('div', { class: 'day-note' }, dayNotes(day).map((t) => h('p', null, t))));
   root.append(h('p', { class: 'muted small' },
     `Weights and increments in ${units()}. Exercises with the same pair letter alternate sets. Renaming keeps history; “Swap” starts a new exercise and leaves the old history under the old one.`));
 
@@ -1054,7 +1056,59 @@ function viewProgram(loc, day) {
   else {
     root.append(h('button', { class: 'btn primary block', style: 'margin-top:16px', onclick: () => { editing = { loc, day, index: list.length, mode: 'add' }; route(); } }, '+ Add exercise'));
   }
+  root.append(savedProgramsSection());
   return root;
+}
+
+// ---------------------------------------------------------------- saved programs
+
+function savedProgramsSection() {
+  const saved = state.settings.savedPrograms || [];
+  return h('div', null,
+    h('h3', null, 'Saved programs'),
+    h('p', { class: 'muted small' }, 'Switch between whole programs. Exercises keep their history either way, and Restore saves your current program first.'),
+    saved.map((x) => {
+      const inUse = programsEqual(x.program, state.program);
+      return h('div', { class: 'card prog-item' },
+        h('div', { class: 'ex-head' }, h('h2', null, x.name, inUse ? h('span', { class: 'tag', style: 'margin-left:6px' }, 'IN USE') : null)),
+        h('div', { class: 'meta muted' }, `Saved ${fmtDate(x.savedAt, { year: 'numeric' })}`),
+        h('div', { class: 'row' },
+          inUse ? null : h('button', { class: 'btn small', onclick: () => restoreSaved(x) }, 'Restore'),
+          h('button', { class: 'btn small danger', 'aria-label': `Delete ${x.name}`, onclick: () => deleteSaved(x) }, '✕')));
+    }),
+    h('button', { class: 'btn block', style: 'margin-top:12px', onclick: () => saveCurrentProgram() }, 'Save current program'));
+}
+
+const savedEntry = (name) => ({
+  id: uid(), name, savedAt: Date.now(), program: structuredClone(state.program), notes: state.program.notes ?? DAY_NOTES,
+});
+
+async function saveCurrentProgram() {
+  const name = prompt('Name for this program', state.program.name || `My program, ${fmtDate(Date.now(), { year: 'numeric' })}`);
+  if (!name?.trim()) return;
+  await saveSettings({ savedPrograms: addSavedProgram(state.settings.savedPrograms, savedEntry(name.trim())) });
+  toast('Program saved');
+  route();
+}
+
+async function restoreSaved(entry) {
+  if (activeSession()) return alert('Finish or discard the workout in progress first.');
+  if (!confirm(`Switch to “${entry.name}”?\n\nYour current program is saved first. History carries over.`)) return;
+  let saved = state.settings.savedPrograms || [];
+  if (!saved.some((x) => programsEqual(x.program, state.program))) {
+    saved = addSavedProgram(saved, savedEntry(state.program.name || `My program, ${fmtDate(Date.now(), { year: 'numeric' })}`));
+  }
+  await saveProgram(programFromSaved(entry, units()));
+  await saveSettings({ savedPrograms: saved });
+  editing = null;
+  toast(`Switched to ${entry.name}`);
+  route();
+}
+
+async function deleteSaved(entry) {
+  if (!confirm(`Delete the saved program “${entry.name}”? Its exercises’ history is kept.`)) return;
+  await saveSettings({ savedPrograms: (state.settings.savedPrograms || []).filter((x) => x.id !== entry.id) });
+  route();
 }
 
 async function move(loc, day, i, d) {
@@ -1279,12 +1333,15 @@ async function importJSON(input) {
   // Backups from before the 3-day program hold an A/B program; it isn't applied.
   const oldProgram = data.program && !isDayProgram(data.program);
   const progDiff = data.program && !oldProgram && !programsEqual(data.program, state.program);
+  const savedIn = mergeSavedPrograms(state.settings.savedPrograms, data.settings?.savedPrograms);
+  const newSaved = savedIn.length - (state.settings.savedPrograms || []).length;
   const lines = [
     `Import backup from ${data.exportedAt ? fmtDate(Date.parse(data.exportedAt), { year: 'numeric' }) : 'unknown date'}?`,
     `• ${plan.added.length} new session(s) will be added`,
     plan.conflicts.length ? `• ${plan.conflicts.length} session(s) differ from yours (you’ll be asked)` : null,
     plan.identical ? `• ${plan.identical} already present` : null,
     progDiff ? '• The backup has a different program (you’ll be asked)' : null,
+    newSaved ? `• ${newSaved} saved program(s) will be added` : null,
     oldProgram ? '• The backup’s program is the old A/B one, so your current program is kept' : null,
   ].filter(Boolean);
   if (!confirm(lines.join('\n'))) return;
@@ -1294,6 +1351,7 @@ async function importJSON(input) {
     toWrite = toWrite.concat(plan.conflicts);
   }
   if (toWrite.length) await db.putSessions(toWrite);
+  if (newSaved) await saveSettings({ savedPrograms: savedIn });
   if (progDiff && confirm('Replace your current program with the one from the backup?\n\nCancel keeps your current program.')) {
     const incomingUnit = data.program.unit || data.settings?.units || 'lb';
     await saveProgram({ ...data.program, unit: incomingUnit });
@@ -1337,26 +1395,41 @@ async function load() {
 }
 
 // One-time updates to a program already on the device. The previous program is
-// kept so the home-screen notice can offer Undo.
+// kept so the home-screen notice can offer Undo; an update with `archive` also
+// saves the program it replaces under Saved programs.
 async function applyProgramUpdates() {
   const applied = new Set(state.settings.appliedUpdates || []);
   const pending = PROGRAM_UPDATES.filter((u) => !applied.has(u.id));
   if (!pending.length) return;
   const before = state.program;
   let program = before;
+  let saved = state.settings.savedPrograms || [];
+  let archived = null;
   const titles = [];
   const changes = [];
   for (const u of pending) {
     applied.add(u.id);
     const r = u.apply(program);
-    if (r.changes.length) { program = r.program; titles.push(u.title); changes.push(...r.changes); }
+    if (!r.changes.length) continue;
+    if (u.archive) {
+      archived = u.archive;
+      saved = addSavedProgram(saved, {
+        id: u.id, name: u.archive.name, savedAt: Date.now(), program: structuredClone(program), notes: program.notes ?? u.archive.notes,
+      });
+    }
+    program = r.program;
+    titles.push(u.title);
+    changes.push(...r.changes);
   }
   if (changes.length) {
     // One notice (and one Undo) for everything applied on this launch, merged
     // with a notice the user hasn't dismissed yet.
     const prev = state.settings.programNotice;
     const id = pending[pending.length - 1].id;
-    await db.setKV(`programBackup:${id}`, prev ? (await db.getKV(`programBackup:${prev.id}`)) || before : before);
+    const backup = prev ? (await db.getKV(`programBackup:${prev.id}`)) || before : before;
+    // Undo brings the replaced program back with its own day notes.
+    await db.setKV(`programBackup:${id}`, archived && !backup.notes ? { ...backup, notes: archived.notes } : backup);
+    state.settings.savedPrograms = saved;
     await saveProgram(program);
     state.settings.programNotice = {
       id,

@@ -99,15 +99,20 @@ export function pairLabels(list) {
 
 /**
  * After a set of entry `i`, which entry is next: the other exercise(s) of its
- * pair in turn, then the first later entry with sets left. null when done or
- * when the entry isn't paired.
+ * pair in turn, then the first later entry with sets left. Straight sets (no
+ * pair): null while the entry has sets left, then the first later entry with
+ * sets left. null when everything after it is done.
  */
 export function nextUp(entries, i) {
-  const g = entries[i]?.target?.group;
-  if (!g) return null;
+  if (!entries[i]) return null;
+  const g = entries[i].target?.group;
   const open = (j) => entries[j].sets.some((s) => !s.done);
-  const members = entries.map((e, j) => (e.target?.group === g ? j : -1)).filter((j) => j >= 0);
-  if (members.length < 2) return null;
+  const members = g ? entries.map((e, j) => (e.target?.group === g ? j : -1)).filter((j) => j >= 0) : [i];
+  if (members.length < 2) {
+    if (open(i)) return null;
+    for (let j = i + 1; j < entries.length; j++) if (open(j)) return j;
+    return null;
+  }
   const at = members.indexOf(i);
   for (let k = 1; k <= members.length; k++) {
     const j = members[(at + k) % members.length];
@@ -117,6 +122,26 @@ export function nextUp(entries, i) {
   return null;
 }
 export const isFinished = (s) => !!(s && s.finishedAt);
+
+// ---------- saved programs ----------
+// settings.savedPrograms: [{ id, name, savedAt, program, notes }], newest first.
+// `notes` are the day notes that went with the program. A restored program
+// carries them in `program.notes`, so its sessions show its own notes.
+
+/** `saved` with `entry` added first, unless an entry with its id is already there. */
+export function addSavedProgram(saved, entry) {
+  const list = saved || [];
+  return list.some((x) => x.id === entry.id) ? list : [entry, ...list];
+}
+
+/** A saved program ready to use: in `units`, named, with its own day notes. */
+export function programFromSaved(entry, units) {
+  const program = convertProgramUnits(structuredClone(entry.program), entry.program.unit || 'lb', units);
+  return { ...program, name: entry.name, ...(entry.notes ? { notes: entry.notes } : {}) };
+}
+
+/** Day notes: the program's own (a restored program), else the defaults. */
+export const notesFor = (program, day, defaults) => program?.notes?.[day] ?? defaults?.[day] ?? [];
 
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);

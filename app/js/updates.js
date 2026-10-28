@@ -5,14 +5,20 @@
 //
 // The earlier A/B updates (arms-shoulders-2026-10, home-workouts-2026-10) were
 // superseded by the 3-day redesign, which replaces the whole program.
+//
+// The Oct 2026 updates build on the paired program (programs/paired-2026-10.js).
+// The straight-sets update replaces it with the current seed. An update with
+// `archive` saves the program it replaces under Saved programs, with those
+// day notes, so it can be restored.
 import { convertProgramUnits, convertIncrement, isDayProgram, allProgramExercises, updateEverywhere, programList, withProgramList, SLOT_KEYS, SLOTS, dayLabel } from './logic.js';
+import { PAIRED_PROGRAM as PAIRED, PAIRED_NOTES } from './programs/paired-2026-10.js';
 import { SEED_PROGRAM } from './seed.js';
 
 /** 3-day full body + Armor (Oct 2026): replaces an A/B program, gym and home. */
 export function fullBodyUpdate(program) {
   if (isDayProgram(program)) return { program, changes: [] };
   const unit = program.unit || 'lb';
-  const fresh = convertProgramUnits({ ...structuredClone(SEED_PROGRAM), unit: 'lb' }, 'lb', unit);
+  const fresh = convertProgramUnits({ ...structuredClone(PAIRED), unit: 'lb' }, 'lb', unit);
   return {
     program: fresh,
     changes: [
@@ -72,7 +78,7 @@ export function controlWorkUpdate(program) {
       const list = programList(p, day, loc);
       if (list.some((x) => x.id === CUFF_ID)) continue;
       const mine = allProgramExercises(p).find((x) => x.id === CUFF_ID)
-        || fromSeed(programList(SEED_PROGRAM, 'armor', loc).find((x) => x.id === CUFF_ID));
+        || fromSeed(programList(PAIRED, 'armor', loc).find((x) => x.id === CUFF_ID));
       const primer = { ...mine, sets: 2, repMin: 10, repMax: 12, restSec: 30 };
       delete primer.group;
       p = withProgramList(p, day, loc, [primer, ...list]);
@@ -81,7 +87,7 @@ export function controlWorkUpdate(program) {
     if (primed.length) changes.push(`${label}${primed.join(', ')}: right-shoulder superset as an easy primer at the start (2 sets)`);
     const armor = programList(p, 'armor', loc);
     if (armor.map((x) => x.id).join() === OLD_ARMOR.join()) {
-      const next = programList(SEED_PROGRAM, 'armor', loc).map((ex) => {
+      const next = programList(PAIRED, 'armor', loc).map((ex) => {
         const mine = armor.find((x) => x.id === ex.id);
         return mine ? { ...mine, ...Object.fromEntries(SLOT_KEYS.map((k) => [k, ex[k]])) } : fromSeed(ex);
       });
@@ -92,7 +98,7 @@ export function controlWorkUpdate(program) {
     const wed = programList(p, 'wed', loc);
     const i = wed.findIndex((x) => x.id === from);
     if (i >= 0 && !wed.some((x) => x.id === to)) {
-      const seedEx = programList(SEED_PROGRAM, 'wed', loc).find((x) => x.id === to);
+      const seedEx = programList(PAIRED, 'wed', loc).find((x) => x.id === to);
       const next = [...wed];
       next[i] = { ...fromSeed(seedEx), group: wed[i].group };
       p = withProgramList(p, 'wed', loc, next);
@@ -146,7 +152,7 @@ export function pairingUpdate(program) {
     let changed = false;
     for (const day of ['mon', 'wed', 'fri']) {
       if (programList(p, day, loc).map((x) => x.id).join() !== SHIPPED_DAYS[loc][day].join()) continue;
-      const next = programList(SEED_PROGRAM, day, loc).map((ex) => {
+      const next = programList(PAIRED, day, loc).map((ex) => {
         const mine = existing.get(ex.id);
         if (!mine) return { ...ex, increment: convertIncrement(ex.increment, 'lb', unit) };
         const out = { ...mine };
@@ -180,7 +186,7 @@ export function supportedDeadBugUpdate(program) {
     const list = programList(p, 'armor', loc);
     const i = list.findIndex((x) => x.id === 'dead_bug');
     if (i < 0 || list.some((x) => x.id === 'supported_dead_bug')) continue;
-    const seedEx = programList(SEED_PROGRAM, 'armor', loc).find((x) => x.id === 'supported_dead_bug');
+    const seedEx = programList(PAIRED, 'armor', loc).find((x) => x.id === 'supported_dead_bug');
     const next = [...list];
     next[i] = { ...seedEx, group: list[i].group };
     p = withProgramList(p, 'armor', loc, next);
@@ -199,7 +205,7 @@ export function supportedDeadBugUpdate(program) {
 export function cuffDoseUpdate(program) {
   const ex = allProgramExercises(program).find((x) => x.id === CUFF_ID);
   if (!ex || ex.cue !== STRAIGHT_ARM_CUE) return { program, changes: [] };
-  const seedEx = allProgramExercises(SEED_PROGRAM).find((x) => x.id === CUFF_ID);
+  const seedEx = allProgramExercises(PAIRED).find((x) => x.id === CUFF_ID);
   const unit = program.unit || 'lb';
   let p = updateEverywhere(program, CUFF_ID, { ...ex, cue: seedEx.cue, increment: convertIncrement(seedEx.increment, 'lb', unit) });
   for (const [loc, day] of SLOTS) {
@@ -237,7 +243,7 @@ export function capsuleStretchUpdate(program) {
     if (loc === 'home' && !p.home) continue;
     const list = programList(p, day, loc);
     if (list.some((x) => STRETCH_IDS.includes(x.id))) continue;
-    const seedEx = programList(SEED_PROGRAM, day, loc).find((x) => STRETCH_IDS.includes(x.id));
+    const seedEx = programList(PAIRED, day, loc).find((x) => STRETCH_IDS.includes(x.id));
     const ex = { ...seedEx };
     const next = [...list];
     const last = list.at(-1)?.group;
@@ -245,7 +251,7 @@ export function capsuleStretchUpdate(program) {
     else if (list.filter((x) => x.group === last).length === 1) {
       // the lone finisher gets a partner: its rest becomes a pair rest
       ex.group = last;
-      const seedLast = programList(SEED_PROGRAM, day, loc).find((x) => x.id === list.at(-1).id && x.group === last);
+      const seedLast = programList(PAIRED, day, loc).find((x) => x.id === list.at(-1).id && x.group === last);
       if (seedLast) next[next.length - 1] = { ...list.at(-1), restSec: seedLast.restSec };
     } else ex.group = String.fromCharCode(last.charCodeAt(0) + 1);
     p = withProgramList(p, day, loc, [...next, ex]);
@@ -280,7 +286,7 @@ export function recoveryArmorUpdate(program) {
     const shipped = armor.length === STRENGTH_ARMOR.length
       && armor.every((x, i) => (STRENGTH_ARMOR[i] === '*row_er' ? x.id.endsWith('row_er') : x.id === STRENGTH_ARMOR[i]));
     if (!shipped) continue;
-    const next = programList(SEED_PROGRAM, 'armor', loc).map((ex) => {
+    const next = programList(PAIRED, 'armor', loc).map((ex) => {
       const mine = armor.find((x) => x.id === ex.id);
       if (!mine) return ex;
       const out = { ...mine, ...Object.fromEntries(SLOT_KEYS.map((k) => [k, ex[k]])) };
@@ -308,7 +314,7 @@ const matches = (list, ids) => list.length === ids.length
 function rebuildFromSeed(program, day, loc) {
   const unit = program.unit || 'lb';
   const existing = new Map(allProgramExercises(program).map((x) => [x.id, x]));
-  const next = programList(SEED_PROGRAM, day, loc).map((ex) => {
+  const next = programList(PAIRED, day, loc).map((ex) => {
     const mine = existing.get(ex.id);
     if (!mine) return { ...ex, increment: convertIncrement(ex.increment, 'lb', unit) };
     const out = { ...mine };
@@ -330,7 +336,7 @@ export function copenhagenCarryUpdate(program) {
   const changes = [];
   // Copenhagen at its old per-side default becomes right ×2, left ×1
   const cph = allProgramExercises(p).find((x) => x.id === 'copenhagen_plank');
-  const seedCph = allProgramExercises(SEED_PROGRAM).find((x) => x.id === 'copenhagen_plank');
+  const seedCph = allProgramExercises(PAIRED).find((x) => x.id === 'copenhagen_plank');
   if (cph?.cue === OLD_COPENHAGEN_CUE) {
     const { perSide, ...rest } = cph;
     p = updateEverywhere(p, cph.id, { ...rest, cue: seedCph.cue });
@@ -372,7 +378,7 @@ export function pairOrderUpdate(program) {
       list = list.map((x) => (x === bridge ? { ...x, sets: 2 } : x));
       changes.push(`${label}: glute bridge 2 sets`);
     }
-    const seed = programList(SEED_PROGRAM, day, loc);
+    const seed = programList(PAIRED, day, loc);
     const next = [...list];
     for (let i = 0; i < next.length - 1; i++) {
       const [a, b] = [next[i], next[i + 1]];
@@ -430,6 +436,31 @@ export function calvesUpdate(program) {
   return { program: p, changes };
 }
 
+/**
+ * Straight sets (Nov 2026): a phase for hip patterning (the right leg learning
+ * to carry the hinge), the right shoulder, and keeping muscle in a small
+ * deficit. Replaces the whole program, gym and home, in the program unit.
+ * Exercise ids carry over, so history and progression continue. The program
+ * it replaces is saved (see `archive`) and the notice offers Undo.
+ */
+export function straightSetsUpdate(program) {
+  if (!isDayProgram(program) || program.name === SEED_PROGRAM.name) return { program, changes: [] };
+  const unit = program.unit || 'lb';
+  return {
+    program: convertProgramUnits({ ...structuredClone(SEED_PROGRAM), unit: 'lb' }, 'lb', unit),
+    changes: [
+      'Straight sets every day: all sets of one exercise, then the next, with a fixed rest. No more pairs',
+      'Lifting days open with the sleeper stretch and the shoulder primer, then Copenhagens (right ×2) and a dowel kickstand hinge right before the legs',
+      'Mon: hack squat, chest press, row, leg curl, lateral raise, curls, single-leg calf raise',
+      'Wed: kickstand RDL, leg press, pulldown, incline push-up plus, Pallof press, hammer curls',
+      'Fri: split squat (new), chest press, row, leg extension, leg curl, lateral raise, curls, single-leg calf raise',
+      'Armor (Tue/Thu): about 40 min; the dowel hinge is new, Copenhagens move to the lifting days',
+      'Out for now: pushdowns, suitcase carry, body saw, glute bridge, reverse pec deck, landmine press, single-arm pulldown, preacher curl, leg press and seated calf raises',
+      'Your previous program is saved under Program → Saved programs. History carries over either way',
+    ],
+  };
+}
+
 export const PROGRAM_UPDATES = [
   { id: 'full-body-3day-2026-10', title: '3-day full body + Armor', apply: fullBodyUpdate, undo: false },
   { id: 'cuff-straight-arm-2026-10', title: 'Shoulder superset cue', apply: cuffCueUpdate },
@@ -442,4 +473,6 @@ export const PROGRAM_UPDATES = [
   { id: 'copenhagen-carry-2026-10', title: 'Copenhagens back, carries on Wednesday', apply: copenhagenCarryUpdate },
   { id: 'pair-order-2026-10', title: 'Three-set exercise first in a pair', apply: pairOrderUpdate },
   { id: 'calves-2026-10', title: 'Calves Mon/Fri, pushdowns 2 sets', apply: calvesUpdate },
+  { id: 'straight-sets-2026-11', title: 'Straight sets: hips, shoulder, muscle', apply: straightSetsUpdate,
+    archive: { name: 'Full body, paired (Oct 2026)', notes: PAIRED_NOTES } },
 ];

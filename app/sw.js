@@ -12,6 +12,7 @@ const ASSETS = [
   './js/backup.js',
   './js/db.js',
   './js/seed.js',
+  './js/programs/paired-2026-10.js',
   './js/chart.js',
   './js/updates.js',
   './icons/icon-192.png',

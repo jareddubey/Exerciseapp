@@ -79,6 +79,15 @@ export function programsEqual(a, b) {
   return stable(strip(a)) === stable(strip(b));
 }
 
+/** Saved programs from a backup added to mine by id, newest first; malformed ones are skipped. */
+export function mergeSavedPrograms(mine, theirs) {
+  const list = mine || [];
+  const ids = new Set(list.map((x) => x.id));
+  const fresh = (Array.isArray(theirs) ? theirs : [])
+    .filter((x) => x && typeof x.id === 'string' && !ids.has(x.id) && isDayProgram(x.program) && validProgram(x.program));
+  return [...list, ...fresh].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+}
+
 function csvCell(v) {
   const s = v == null ? '' : String(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildExport, parseImport, planImport, toCSV, programsEqual } from '../app/js/backup.js';
+import { buildExport, parseImport, planImport, toCSV, programsEqual, mergeSavedPrograms } from '../app/js/backup.js';
 import { SEED_PROGRAM, DEFAULT_SETTINGS } from '../app/js/seed.js';
 
 const session = (id, extra = {}) => ({
@@ -69,4 +69,22 @@ test('v2 backups (A/B program, cut data) still parse', () => {
   assert.equal(back.sessions.length, 1);
   assert.equal(back.program.A.length, 1);
   assert.ok(!programsEqual(back.program, SEED_PROGRAM));
+});
+
+test('saved programs from a backup merge by id; malformed or A/B ones are skipped', () => {
+  const mine = [{ id: 'a', name: 'A', savedAt: 5, program: SEED_PROGRAM }];
+  const theirs = [
+    { id: 'a', name: 'A (theirs)', savedAt: 9, program: SEED_PROGRAM },
+    { id: 'b', name: 'B', savedAt: 7, program: SEED_PROGRAM },
+    { id: 'c', name: 'no program', savedAt: 8 },
+    { id: 'd', name: 'A/B', savedAt: 8, program: { A: [], B: [] } },
+    { id: 'e', name: 'bad day', savedAt: 8, program: { ...SEED_PROGRAM, wed: [{ id: 1 }] } },
+    null,
+  ];
+  assert.deepEqual(mergeSavedPrograms(mine, theirs).map((x) => [x.id, x.name]), [['b', 'B'], ['a', 'A']]);
+  assert.deepEqual(mergeSavedPrograms(undefined, undefined), []);
+  assert.equal(mergeSavedPrograms(mine, 'nope').length, 1);
+  // they travel in the settings of a backup
+  const back = parseImport(JSON.stringify(buildExport({ program: SEED_PROGRAM, settings: { ...DEFAULT_SETTINGS, savedPrograms: theirs.slice(1, 2) }, sessions: [] })));
+  assert.deepEqual(mergeSavedPrograms([], back.settings.savedPrograms).map((x) => x.id), ['b']);
 });
