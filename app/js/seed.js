@@ -176,21 +176,25 @@ export const SEED_PROGRAM = {
   home: HOME_PROGRAM,
 };
 
-// Shown at the top of a session and in the program editor.
-// PT's side-lying drill: deep core on, then the left hip turns out and lifts
-// while it stays on. Primes the left side before squats, hinges and core work.
-const SIDE_LYING_CORE = 'left side-lying core (on your right side): 3–5 pelvic floor breaths → multifidus + TA co-contraction → left hip ER and abduction ×8–10 slow, keeping it on, about 20–30% effort';
-const WARMUP = `Warm-up, about 20 min: 3–5 min easy bike or brisk walk · ${SIDE_LYING_CORE} · quadruped rock-back ×8 · 90/90 hip switches ×6/side · bird dog ×5/side. Then the first four exercises: the sleeper stretch, the right-shoulder primer (1 lb, well short of fatigue: practice, not training), and right before the legs, Copenhagens and the dowel kickstand hinge.`;
-const HIPS = 'Hips: the right leg is learning to carry the hinge. Right side first on single-leg work · weight on the whole front foot, feel its inner hamstring and glute · if the front or side of the right hip grips, breathe out, let the hip crease fold, and shorten the range · left low back discomfort that builds during a set → shorter range or lighter; stop that exercise if it lingers · left hip pinch → feet higher and wider on the hack squat and leg press, a shallower split squat.';
-const EFFORT = 'Effort: end the big lifts with 2–3 good reps left; leg curl, leg extension, lateral raise and calf raise can go to 1–2. Failure isn’t needed. Week 1: leave 3–4 in the tank while you find your weights. Right arm (biceps tenodesis, June 2026): curls, rows and pulldowns stay within your PT’s limits. Rehab drills keep their own stop rules. Never push through joint pain.';
-const STRAIGHT = 'Straight sets: all sets of one exercise, then the next. The rest timer counts each exercise’s rest.';
-const ARMOR_OPENER = `Opener, about 5 min: 90-90 breathing, feet on the wall, heels pressing lightly (5 long exhales with a 2–3 s pause, twice) · ${SIDE_LYING_CORE} · adductor rock-back ×8/side · 90/90 hip switches ×6/side. A hand on the left inner thigh should feel it stay quiet.`;
-const CUFF_GOALS = 'Right-shoulder superset is the hard dose today. Goal: 3 × 15 at 1 lb with 3-s holds and no front-of-shoulder ache → then 1.5 lb (wrist weight), not 2. A dull ache up to 2/10 that’s gone within an hour is OK; a pinch, or a shoulder that’s worse the next day → shorter range. More load later: bend the elbow and use 2 lb.';
+// Shown at the top of a session and in the program editor: a title and its
+// bullets. Cues live on the exercises.
+const WARMUP = { title: 'Warm-up, about 10 min', items: [
+  'Easy bike or brisk walk: 3–5 min',
+  'Left side-lying core: hip ER and abduction ×8–10',
+  'Quadruped rock-back ×8',
+  '90/90 hip switches ×6/side',
+  'Bird dog ×5/side',
+] };
 export const DAY_NOTES = {
-  mon: [WARMUP, HIPS, EFFORT, STRAIGHT],
-  wed: [WARMUP, HIPS, EFFORT, STRAIGHT],
-  fri: [WARMUP, HIPS, EFFORT, STRAIGHT],
-  armor: [ARMOR_OPENER, CUFF_GOALS, 'Straight sets, 30 s rests (15 s between stretches). About 40 min, before or after the long dog walk: Zone 2, at a pace where you can still talk.'],
+  mon: [WARMUP],
+  wed: [WARMUP],
+  fri: [WARMUP],
+  armor: [{ title: 'Opener, about 5 min', items: [
+    '90-90 breathing, feet on the wall: 5 exhales ×2',
+    'Left side-lying core: hip ER and abduction ×8–10',
+    'Adductor rock-back ×8/side',
+    '90/90 hip switches ×6/side',
+  ] }],
 };
 
 export const DEFAULT_SETTINGS = {

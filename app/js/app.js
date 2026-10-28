@@ -66,6 +66,9 @@ const currentLocation = () => (state.program?.home && state.settings.location ==
 // Program definition of an exercise id, from any gym/home day.
 const programDef = (id) => allProgramExercises(state.program).find((x) => x.id === id);
 const dayNotes = (day) => notesFor(state.program, day, DAY_NOTES);
+// A note is a paragraph, or { title, items } shown as a bulleted list.
+const dayNoteEl = (notes) => h('div', { class: 'day-note' }, notes.map((t) => typeof t === 'string' ? h('p', null, t)
+  : [h('p', { class: 'day-note-title' }, t.title), h('ul', null, t.items.map((x) => h('li', null, x)))]));
 
 // ---------------------------------------------------------------- persistence
 
@@ -516,7 +519,7 @@ function viewSession(session) {
 
   const root = h('div', { class: 'session' }, header);
   if (live && dayNotes(session.day).length) {
-    root.append(h('div', { class: 'day-note' }, dayNotes(session.day).map((t) => h('p', null, t))));
+    root.append(dayNoteEl(dayNotes(session.day)));
   }
   // Paired exercises (A1, A2) sit together in one bordered group.
   const labels = pairLabels(session.entries.map((e) => e.target || {}));
@@ -1028,7 +1031,7 @@ function viewProgram(loc, day) {
         h('button', { 'aria-pressed': String(l === loc), onclick: nav(l, day) }, label))),
     h('div', { class: 'seg', role: 'group', 'aria-label': 'Day', style: 'margin-top:8px' },
       DAYS.map((d) => h('button', { 'aria-pressed': String(d === day), onclick: nav(loc, d) }, dayLabel(d)))));
-  if (dayNotes(day).length) root.append(h('div', { class: 'day-note' }, dayNotes(day).map((t) => h('p', null, t))));
+  if (dayNotes(day).length) root.append(dayNoteEl(dayNotes(day)));
   root.append(h('p', { class: 'muted small' },
     `Weights and increments in ${units()}. Exercises with the same pair letter alternate sets. Renaming keeps history; “Swap” starts a new exercise and leaves the old history under the old one.`));
 

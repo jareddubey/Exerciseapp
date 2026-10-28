@@ -102,15 +102,15 @@ test('seed: weekly hard sets keep muscle in a deficit without piling on', () => 
   }
 });
 
-test('seed: notes for straight sets, the hips and the right arm', () => {
-  for (const day of DAYS) assert.ok(DAY_NOTES[day].length, day);
-  for (const day of LIFT_DAYS) {
-    const all = DAY_NOTES[day].join(' ');
-    for (const re of [/side-lying core/, /Copenhagens/, /Straight sets/, /tenodesis/, /right hip grips/, /left hip pinch/]) assert.match(all, re, `${day} ${re}`);
-    assert.doesNotMatch(all, /Pairs \(A1/);
+test('seed: notes are a short warm-up list', () => {
+  for (const day of DAYS) {
+    const [note, ...rest] = DAY_NOTES[day];
+    assert.equal(rest.length, 0, day);
+    assert.match(note.title, /^(Warm-up|Opener), about \d+ min$/, day);
+    assert.ok(note.items.length >= 4, day);
   }
-  const armor = DAY_NOTES.armor.join(' ');
-  for (const re of [/90-90 breathing/, /90\/90 hip switches/, /3 × 15 at 1 lb/, /dog walk/]) assert.match(armor, re);
+  for (const day of LIFT_DAYS) assert.ok(DAY_NOTES[day][0].items.some((x) => /side-lying core/.test(x)), day);
+  assert.ok(DAY_NOTES.armor[0].items.some((x) => /90-90 breathing/.test(x)));
 });
 
 test('newSession: straight sets, and the rest timer moves on once an exercise is done', () => {
