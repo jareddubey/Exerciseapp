@@ -351,6 +351,30 @@ export function swapEntry(session, index, ex, sessions) {
 }
 
 /**
+ * Add an exercise mid-session, prefilled from its own history. It goes right
+ * after the entry at `after` (-1 puts it first), or at the end when `after`
+ * is null or past the last entry. Returns { entries, index } where index is
+ * the new entry's position.
+ */
+export function addEntry(session, ex, sessions, after = null) {
+  const entry = makeEntry(ex, sessions, { units: session.unit, deload: session.deload, day: session.day });
+  const entries = [...session.entries];
+  const index = after == null || after >= entries.length ? entries.length : Math.max(0, after + 1);
+  entries.splice(index, 0, entry);
+  return { entries, index };
+}
+
+/**
+ * Remove the exercise at `index` mid-session. Returns { entries, hadData }:
+ * hadData says the removed entry had logged sets or a note (so the UI can warn).
+ */
+export function removeEntry(session, index) {
+  const removed = session.entries[index];
+  const entries = session.entries.filter((_, i) => i !== index);
+  return { entries, hadData: !!removed && entryHasData(removed) };
+}
+
+/**
  * Change an entry's parameters mid-session (same id, so history continues).
  * `ex` becomes the entry's target; `setCount` is how many sets this workout has.
  * New sets copy the last set's weight. Only empty sets are removed, from the

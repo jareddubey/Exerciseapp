@@ -4,7 +4,7 @@ import {
   nextDay, suggestWeight, lastFor, lastNote, deloadStatus, sessionsThisWeek,
   lastWorkout, backupStatus, newSession, formatSets, formatTarget, fmtNum, isFinished,
   performedSets, exerciseCatalog, exerciseHistory, convertProgramUnits, makeExerciseId, clean, DAY,
-  swapEntry, editEntry, programList, withProgramList, allProgramExercises, updateEverywhere, repsOnly, noIncrement, locationOf,
+  swapEntry, addEntry, removeEntry, editEntry, programList, withProgramList, allProgramExercises, updateEverywhere, repsOnly, noIncrement, locationOf,
   slotName, SLOTS, DAYS, LIFT_DAYS, dayLabel, dayTitle, pairLabels, nextUp, isDayProgram,
   uid, addSavedProgram, programFromSaved, notesFor,
 } from './logic.js';
@@ -534,7 +534,11 @@ function viewSession(session) {
 
   const foot = h('div', { class: 'session-foot' });
   if (live) {
+    const addBtn = h('button', {
+      class: 'btn block', onclick: () => { const panel = h('section', { class: 'card' }, ...addPanel(session)); addBtn.replaceWith(panel); panel.scrollIntoView({ block: 'nearest' }); },
+    }, '+ Add exercise');
     foot.append(
+      addBtn,
       h('button', { class: 'btn primary block', style: 'min-height:56px;font-size:19px', onclick: () => finishSession(session) }, 'Finish session'),
       h('label', { class: 'check' },
         h('input', { type: 'checkbox', checked: session.deload, onchange: (ev) => { session.deload = ev.target.checked; save(); } }),
@@ -578,8 +582,12 @@ function exerciseCard(session, ei, live, save, pairLabel) {
   const count = h('span', { class: 'ex-count' });
   const updateCount = () => { count.textContent = `${e.sets.filter((s) => s.done).length}/${e.sets.length}`; };
 
-  const card = h('section', { class: 'card', 'aria-label': e.name },
-    h('div', { class: 'ex-head' }, pairLabel ? h('span', { class: 'pair' }, pairLabel) : null, h('h2', null, e.name), count),
+  const card = h('section', { class: 'card', 'aria-label': e.name, 'data-ei': String(ei) },
+    h('div', { class: 'ex-head' }, pairLabel ? h('span', { class: 'pair' }, pairLabel) : null, h('h2', null, e.name), count,
+      live ? h('button', {
+        class: 'icon-btn ex-remove', 'aria-label': `Remove ${e.name} from this workout`, title: 'Remove from this workout',
+        onclick: () => card.replaceChildren(...removePanel(session, ei)),
+      }, '✕') : null),
     ex.cue ? h('p', { class: 'cue' }, ex.cue) : null,
     h('div', { class: 'meta' },
       h('span', { class: 'target' }, formatTarget({ ...ex, sets: e.sets.length }, false)),
@@ -828,15 +836,15 @@ function editPanel(session, ei) {
   ];
 }
 
-// Inline form that replaces an exercise card to swap it mid-workout.
-function swapPanel(session, ei) {
-  const e = session.entries[ei];
-  const base = e.target || {};
+// Pick a known exercise (not already in this session) or describe a new one.
+// `base` seeds the new-exercise fields. build() returns the exercise, or null
+// after telling the user what's missing.
+function exerciseChooser(session, base = {}) {
   const inSession = new Set(session.entries.map((x) => x.exerciseId));
   const cat = exerciseCatalog(state.program, state.sessions);
   const known = [...cat.entries()].filter(([id]) => !inSession.has(id)).sort((a, b) => a[1].localeCompare(b[1]));
 
-  const pick = h('select', { class: 'field', 'aria-label': 'Replacement exercise' },
+  const pick = h('select', { class: 'field', 'aria-label': 'Exercise' },
     h('option', { value: '' }, 'New exercise…'),
     known.map(([id, name]) => h('option', { value: id }, name)));
   const name = h('input', { class: 'field', autocomplete: 'off', placeholder: 'e.g. Hip abduction machine' });
@@ -859,28 +867,44 @@ function swapPanel(session, ei) {
     h('label', { class: 'check' }, perSide, 'Per side'));
   pick.addEventListener('change', () => { fields.hidden = !!pick.value; });
 
+  function build() {
+    if (pick.value) return exerciseDef(pick.value);
+    const nm = name.value.trim();
+    if (!nm) { alert('Pick an exercise or enter a name.'); return null; }
+    const n = (inp, d) => { const v = parseNum(inp.value); return v == null ? d : v; };
+    const ex = {
+      id: makeExerciseId(nm, new Set([...cat.keys(), ...inSession])), name: nm, cue: '',
+      sets: Math.max(1, Math.round(n(f.sets, 2))), restSec: Math.max(0, Math.round(n(f.restSec, 60))),
+      repMin: Math.max(1, Math.round(n(f.repMin, 10))), repMax: Math.max(1, Math.round(n(f.repMax, 12))),
+      perSide: perSide.checked, ...loadFlags(load.value),
+    };
+    setMeasure(ex, meas.select.value);
+    ex.increment = noIncrement(ex) ? 0 : Math.max(0, n(f.increment, 5));
+    if (ex.repMax < ex.repMin) [ex.repMin, ex.repMax] = [ex.repMax, ex.repMin];
+    return ex;
+  }
+  return { pick, fields, build };
+}
+
+// Re-render the session, then bring the card for entry `ei` into view.
+function showEntry(ei) {
+  route();
+  requestAnimationFrame(() => requestAnimationFrame(() =>
+    app.querySelector(`.card[data-ei="${ei}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })));
+}
+
+// Inline form that replaces an exercise card to swap it mid-workout.
+function swapPanel(session, ei) {
+  const e = session.entries[ei];
+  const base = e.target || {};
+  const chooser = exerciseChooser(session, base);
   const loc = locationOf(session);
   const inProgram = programList(state.program, session.day, loc).some((x) => x.id === e.exerciseId);
   const permanent = h('input', { type: 'checkbox' });
 
   async function doSwap() {
-    let ex;
-    if (pick.value) {
-      ex = exerciseDef(pick.value);
-    } else {
-      const nm = name.value.trim();
-      if (!nm) { alert('Pick an exercise or enter a name.'); return; }
-      const n = (inp, d) => { const v = parseNum(inp.value); return v == null ? d : v; };
-      ex = {
-        id: makeExerciseId(nm, new Set([...cat.keys(), ...inSession])), name: nm, cue: '',
-        sets: Math.max(1, Math.round(n(f.sets, 2))), restSec: Math.max(0, Math.round(n(f.restSec, 60))),
-        repMin: Math.max(1, Math.round(n(f.repMin, 10))), repMax: Math.max(1, Math.round(n(f.repMax, 12))),
-        perSide: perSide.checked, ...loadFlags(load.value),
-      };
-      setMeasure(ex, meas.select.value);
-      ex.increment = noIncrement(ex) ? 0 : Math.max(0, n(f.increment, 5));
-      if (ex.repMax < ex.repMin) [ex.repMin, ex.repMax] = [ex.repMax, ex.repMin];
-    }
+    let ex = chooser.build();
+    if (!ex) return;
     // The replacement takes over this slot's pair and, in a pair, its rest.
     if (base.group) ex = { ...ex, group: base.group, restSec: base.restSec ?? ex.restSec };
     else delete ex.group;
@@ -900,11 +924,90 @@ function swapPanel(session, ei) {
     h('h2', null, `Swap ${e.name}`),
     h('p', { class: 'muted small' }, 'Just for this workout unless you tick the box below. History for each exercise stays separate.'),
     h('div', { class: 'form', style: 'margin-top:10px' },
-      h('label', null, 'Replace with', pick),
-      fields,
+      h('label', null, 'Replace with', chooser.pick),
+      chooser.fields,
       inProgram ? h('label', { class: 'check' }, permanent, `Also replace it in the ${slotName(session.day, loc)} program`) : null,
       h('div', { class: 'row' },
         h('button', { class: 'btn primary', onclick: doSwap }, 'Swap'),
+        h('button', { class: 'btn', onclick: () => route() }, 'Cancel'))),
+  ];
+}
+
+// Inline form at the end of a session to add an exercise mid-workout.
+function addPanel(session) {
+  const chooser = exerciseChooser(session);
+  const loc = locationOf(session);
+  const last = session.entries.length - 1;
+  const where = h('select', { class: 'field', 'aria-label': 'Where' },
+    h('option', { value: String(last), selected: true }, 'At the end'),
+    h('option', { value: '-1' }, 'At the start'),
+    session.entries.slice(0, -1).map((x, i) => h('option', { value: String(i) }, `After ${x.name}`)));
+  const permanent = h('input', { type: 'checkbox' });
+
+  async function doAdd() {
+    const ex = chooser.build();
+    if (!ex) return;
+    delete ex.group;
+    const r = addEntry(session, ex, state.sessions, Number(where.value));
+    session.entries = r.entries;
+    autosave(session);
+    await flushSave(session.id);
+    if (permanent.checked) {
+      // Same spot in the program: after the exercise it follows today, if that one is in the program.
+      const list = [...programList(state.program, session.day, loc)];
+      const prevId = session.entries[r.index - 1]?.exerciseId;
+      const at = r.index === 0 ? 0 : list.findIndex((x) => x.id === prevId) + 1 || list.length;
+      list.splice(at, 0, { ...ex });
+      await saveProgram(withProgramList(state.program, session.day, loc, list));
+    }
+    toast(permanent.checked ? `${ex.name} added to workout and program` : `${ex.name} added`);
+    showEntry(r.index);
+  }
+
+  return [
+    h('h2', null, 'Add exercise'),
+    h('p', { class: 'muted small' }, 'Just for this workout unless you tick the box below.'),
+    h('div', { class: 'form', style: 'margin-top:10px' },
+      h('label', null, 'Exercise', chooser.pick),
+      chooser.fields,
+      h('label', null, 'Where', where),
+      h('label', { class: 'check' }, permanent, `Also add it to the ${slotName(session.day, loc)} program`),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', onclick: doAdd }, 'Add'),
+        h('button', { class: 'btn', onclick: () => route() }, 'Cancel'))),
+  ];
+}
+
+// Inline confirmation that replaces an exercise card to remove it mid-workout.
+function removePanel(session, ei) {
+  const e = session.entries[ei];
+  const loc = locationOf(session);
+  const inProgram = programList(state.program, session.day, loc).some((x) => x.id === e.exerciseId);
+  const done = e.sets.filter((s) => Number(s.reps) > 0 || s.done).length;
+  const permanent = h('input', { type: 'checkbox' });
+
+  async function doRemove() {
+    const r = removeEntry(session, ei);
+    session.entries = r.entries;
+    autosave(session);
+    await flushSave(session.id);
+    if (permanent.checked) {
+      const list = programList(state.program, session.day, loc).filter((x) => x.id !== e.exerciseId);
+      await saveProgram(withProgramList(state.program, session.day, loc, list));
+    }
+    toast(permanent.checked ? `${e.name} removed from workout and program` : `${e.name} removed`);
+    route();
+  }
+
+  return [
+    h('h2', null, `Remove ${e.name}?`),
+    h('p', { class: 'muted small' }, done
+      ? `Its ${done} logged set${done > 1 ? 's' : ''} from today will be deleted. Earlier history is kept.`
+      : 'Just for this workout unless you tick the box below. Its history is kept.'),
+    h('div', { class: 'form', style: 'margin-top:10px' },
+      inProgram ? h('label', { class: 'check' }, permanent, `Also remove it from the ${slotName(session.day, loc)} program`) : null,
+      h('div', { class: 'row' },
+        h('button', { class: 'btn danger', onclick: doRemove }, 'Remove'),
         h('button', { class: 'btn', onclick: () => route() }, 'Cancel'))),
   ];
 }

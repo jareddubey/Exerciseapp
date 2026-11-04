@@ -284,6 +284,52 @@ test('swapEntry: swapped-in exercise is prefilled from its own history, deload r
   assert.equal(makeEntry(legPress, hist).sets.length, 3);
 });
 
+// ---------- mid-session add / remove ----------
+import { addEntry, removeEntry } from '../app/js/logic.js';
+
+const ABD = { id: 'hip_abduction', name: 'Hip abduction machine', sets: 2, repMin: 12, repMax: 15, restSec: 60, increment: 5 };
+
+test('addEntry: appends at the end by default', () => {
+  const s = newSession('wed', PROG, [], { now: T0 });
+  const r = addEntry(s, ABD, []);
+  assert.equal(r.entries.length, s.entries.length + 1);
+  assert.equal(r.index, s.entries.length);
+  assert.equal(r.entries[r.index].exerciseId, 'hip_abduction');
+  assert.equal(r.entries[r.index].sets.length, 2);
+});
+
+test('addEntry: inserts after a given entry, or first with -1', () => {
+  const s = newSession('wed', PROG, [], { now: T0 });
+  const r = addEntry(s, ABD, [], 0);
+  assert.equal(r.index, 1);
+  assert.equal(r.entries[1].exerciseId, 'hip_abduction');
+  assert.equal(r.entries[0].exerciseId, s.entries[0].exerciseId);
+  const first = addEntry(s, ABD, [], -1);
+  assert.equal(first.index, 0);
+  assert.equal(first.entries[0].exerciseId, 'hip_abduction');
+  assert.equal(s.entries.length, r.entries.length - 1, 'original session untouched');
+});
+
+test('addEntry: prefilled from its own history, deload respected', () => {
+  const hist = [sess('A', T0, { leg_press: [[100, 12], [100, 12], [100, 12]] })];
+  const s = newSession('wed', PROG, hist, { now: T0 + 2 * DAY, deload: true });
+  const r = addEntry(s, legPress, hist);
+  assert.deepEqual(r.entries[r.index].sets.map((x) => x.weight), [110, 110]);
+});
+
+test('removeEntry: drops the entry and reports logged data', () => {
+  const s = newSession('wed', PROG, [], { now: T0 });
+  const id = s.entries[1].exerciseId;
+  const r = removeEntry(s, 1);
+  assert.equal(r.entries.length, s.entries.length - 1);
+  assert.ok(!r.entries.some((e) => e.exerciseId === id));
+  assert.equal(r.hadData, false);
+  s.entries[0].sets[0].reps = 8;
+  assert.equal(removeEntry(s, 0).hadData, true);
+  s.entries[1].note = 'tweaky';
+  assert.equal(removeEntry(s, 1).hadData, true);
+});
+
 // ---------- mid-session edit ----------
 import { editEntry } from '../app/js/logic.js';
 
