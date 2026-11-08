@@ -470,8 +470,8 @@ const ABS_CHANGES = {
 
 /**
  * Lower body + abs (Nov 2026): Monday and Friday at the gym and Wednesday at
- * home become the seed's lower-body and abdominal-strength days; the primers
- * still open each one. Monday at home, Wednesday at the gym and Friday at home
+ * home become the seed's lower-body and abdominal-strength days, without the
+ * primers. Monday at home, Wednesday at the gym and Friday at home
  * are untouched. Exercises the user already has keep their name, cue and load.
  */
 export function lowerBodyAbsUpdate(program) {
@@ -485,7 +485,7 @@ export function lowerBodyAbsUpdate(program) {
     p = rebuildFromSeed(p, day, loc, SEED_PROGRAM);
     changes.push(ABS_CHANGES[`${loc} ${day}`]);
   }
-  if (changes.length) changes.push('The primers still open each day. Mon at home, Wed at the gym and Fri at home are unchanged');
+  if (changes.length) changes.push('These three days no longer open with the sleeper stretch, shoulder primer, Copenhagens and dowel hinge. Mon at home, Wed at the gym and Fri at home are unchanged');
   return { program: p, changes };
 }
 

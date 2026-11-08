@@ -19,7 +19,7 @@ test('seed: every day is well formed, in straight sets', () => {
   assert.ok(isDayProgram(SEED_PROGRAM) && isDayProgram(SEED_PROGRAM.home));
   for (const [loc, day] of SLOTS) {
     const list = programList(SEED_PROGRAM, day, loc);
-    assert.ok(list.length >= 9, `${loc} ${day}`);
+    assert.ok(list.length >= 6, `${loc} ${day}`);
     assert.equal(new Set(list.map((x) => x.id)).size, list.length, `${loc} ${day} ids unique`);
     for (const ex of list) {
       assert.ok(ex.id && ex.name && ex.sets >= 1 && ex.repMin <= ex.repMax && ex.restSec > 0, ex.id);
@@ -39,10 +39,17 @@ test('seed: a shared id is the same exercise everywhere; only the prescription d
   assert.ok(find('mon', 'leg_press').repMin < find('fri', 'leg_press').repMin);
 });
 
-test('seed: shoulder then hip primers open every lifting day; Copenhagens before the legs, not on Armor', () => {
+// The lower-body + abs days have no primers.
+const ABS_DAY = (loc, day) => (loc === 'gym' ? day === 'mon' || day === 'fri' : day === 'wed');
+
+test('seed: shoulder then hip primers open the other lifting days; Copenhagens before the legs, not on Armor', () => {
   for (const [loc, day] of SLOTS) {
     const list = programList(SEED_PROGRAM, day, loc);
-    assert.ok(list.some((x) => x.id === 'dowel_kickstand_hinge'), `${loc} ${day}: hinge practice every day`);
+    if (ABS_DAY(loc, day)) {
+      for (const id of PRIMERS) assert.ok(!list.some((x) => x.id === id), `${loc} ${day}: no ${id}`);
+      continue;
+    }
+    assert.ok(list.some((x) => x.id === 'dowel_kickstand_hinge'), `${loc} ${day}: hinge practice`);
     if (day === 'armor') {
       assert.ok(!list.some((x) => x.id === 'copenhagen_plank'), `${loc} armor`);
       const cuff = list.find((x) => x.id === 'side_lying_cuff_supersets');
@@ -56,7 +63,7 @@ test('seed: shoulder then hip primers open every lifting day; Copenhagens before
     assert.deepEqual([cuff.sets, cuff.repMin, cuff.repMax], [2, 8, 10], `${loc} ${day}: an easy primer`);
     assert.equal(cph.sets, 3, `${loc} ${day}: right, right, left`);
   }
-  assert.match(find('mon', 'copenhagen_plank').cue, /Sets 1–2 right/);
+  assert.match(find('wed', 'copenhagen_plank').cue, /Sets 1–2 right/);
   for (const id of ['kickstand_rdl', 'split_squat', 'dowel_kickstand_hinge']) {
     assert.match(allProgramExercises(SEED_PROGRAM).find((x) => x.id === id).cue, /^Right (side|leg)/, id);
   }
@@ -66,9 +73,9 @@ test('seed: shoulder then hip primers open every lifting day; Copenhagens before
 
 test('seed: the lifting days as planned', () => {
   // lower body + abs
-  assert.deepEqual(ids('mon').slice(4), ['leg_press', 'leg_ext', 'leg_curl', 'single_leg_calf_raise', 'reverse_crunch', 'dead_bug', 'bent_knee_hollow_hold']);
-  assert.deepEqual(ids('fri').slice(4), ['leg_press', 'leg_ext', 'leg_curl', 'controlled_crunch', 'partial_sit_up', 'bent_knee_hollow_hold']);
-  assert.deepEqual(ids('wed', 'home').slice(4), ['bulgarian_split_squat', 'glut_bridge', 'step_back_lunge', 'pilates_half_roll_back', 'assisted_pilates_roll_up', 'dead_bug']);
+  assert.deepEqual(ids('mon'), ['leg_press', 'leg_ext', 'leg_curl', 'single_leg_calf_raise', 'reverse_crunch', 'dead_bug', 'bent_knee_hollow_hold']);
+  assert.deepEqual(ids('fri'), ['leg_press', 'leg_ext', 'leg_curl', 'controlled_crunch', 'partial_sit_up', 'bent_knee_hollow_hold']);
+  assert.deepEqual(ids('wed', 'home'), ['bulgarian_split_squat', 'glut_bridge', 'step_back_lunge', 'pilates_half_roll_back', 'assisted_pilates_roll_up', 'dead_bug']);
   // unchanged
   assert.deepEqual(ids('mon', 'home').slice(4), ['goblet_squat', 'db_bench_press', 'db_chest_supported_row', 'band_leg_curl', 'db_lateral_raise', 'standing_bicep_curl', 'single_leg_calf_raise']);
   assert.deepEqual(ids('wed').slice(4), ['kickstand_rdl', 'leg_press', 'lat_pull_down', 'push_up', 'pallof', 'hammer_curl']);

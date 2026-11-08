@@ -7,8 +7,9 @@
 // 1. Hips and shoulder. The right leg doesn't yet support a hinge: the front
 //    and side of the right hip grip, and a right-foot-forward kickstand RDL
 //    loads the left low back. Copenhagens (right ×2) wake the right adductor
-//    magnus right before the legs every lifting day, the dowel kickstand hinge
-//    practises the pattern daily, and single-leg work starts on the right.
+//    magnus right before the legs, the dowel kickstand hinge practises the
+//    pattern, and single-leg work starts on the right. (Mon/Fri at the gym and
+//    Wed at home skip these primers.)
 //    The left hip pinches at the front in deep flexion, so depth stops short
 //    of it. Right biceps tenodesis + labral debridement June 19 2026: curls,
 //    rows and pulldowns stay within the PT's limits; daily shoulder control
@@ -19,7 +20,8 @@
 // 3. Abdominal strength (Nov 2026): Monday and Friday at the gym are lower
 //    body + abs (leg press, leg extension, leg curl, then crunch variations,
 //    dead bugs and a bent-knee hollow hold); Wednesday at home is single-leg
-//    work, glute bridges and Pilates roll-backs and roll-ups. Monday at home,
+//    work, glute bridges and Pilates roll-backs and roll-ups. No primers on
+//    these three days. Monday at home,
 //    Wednesday at the gym and Friday at home are unchanged.
 //
 // Also built around a sensitive lower back (no axial loading, stop before the
@@ -131,7 +133,6 @@ export const HOME_PROGRAM = {
     p(SL_CALF, 3, 12, 20, 45),
   ],
   wed: [
-    ...primers(),
     p(BULGARIAN, 3, 8, 10, 90),
     p(BRIDGE, 3, 12, 15, 60),
     p(REVERSE_LUNGE, 2, 10, 10, 60),
@@ -156,7 +157,6 @@ export const HOME_PROGRAM = {
 export const SEED_PROGRAM = {
   name: 'Straight sets: hips, shoulder, muscle (Nov 2026)',
   mon: [
-    ...primers(),
     p(LEG_PRESS, 3, 10, 12, 120),
     p(LEG_EXT, 3, 12, 12, 60),
     p(LEG_CURL, 3, 12, 12, 60),
@@ -175,7 +175,6 @@ export const SEED_PROGRAM = {
     p(HAMMER, 2, 10, 12, 60),
   ],
   fri: [
-    ...primers(),
     p(LEG_PRESS, 3, 12, 12, 120),
     p(LEG_EXT, 2, 12, 12, 60),
     p(LEG_CURL, 3, 12, 12, 60),
