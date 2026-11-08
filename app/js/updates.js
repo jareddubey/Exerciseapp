@@ -310,11 +310,11 @@ const OLD_COPENHAGEN_CUE = 'Short lever: knee on the bench · body straight · l
 const matches = (list, ids) => list.length === ids.length
   && list.every((x, i) => (ids[i] === '*row_er' ? x.id.endsWith('row_er') : x.id === ids[i]));
 
-/** A day replaced by the seed's; exercises the user already has keep their name, cue and load. */
-function rebuildFromSeed(program, day, loc) {
+/** A day replaced by `seed`'s; exercises the user already has keep their name, cue and load. */
+function rebuildFromSeed(program, day, loc, seed = PAIRED) {
   const unit = program.unit || 'lb';
   const existing = new Map(allProgramExercises(program).map((x) => [x.id, x]));
-  const next = programList(PAIRED, day, loc).map((ex) => {
+  const next = programList(seed, day, loc).map((ex) => {
     const mine = existing.get(ex.id);
     if (!mine) return { ...ex, increment: convertIncrement(ex.increment, 'lb', unit) };
     const out = { ...mine };
@@ -461,6 +461,34 @@ export function straightSetsUpdate(program) {
   };
 }
 
+const ABS_DAYS = [['gym', 'mon'], ['home', 'wed'], ['gym', 'fri']];
+const ABS_CHANGES = {
+  'gym mon': 'Mon (gym): lower body + abs: leg press 3 × 10–12, leg extension 3 × 12, seated leg curl 3 × 12, calf raise 3 × 15, reverse crunch 3 × 10, dead bug 2 × 10/side, bent-knee hollow hold 2 × 20 s',
+  'home wed': 'Wed (home): Bulgarian split squat 3 × 8–10/leg, glute bridge 3 × 12–15, reverse lunge 2 × 10/leg, Pilates half roll-back 3 × 8, assisted Pilates roll-up 3 × 5, dead bug 2 × 10/side',
+  'gym fri': 'Fri (gym): leg press 3 × 12, leg extension 2 × 12, seated leg curl 3 × 12, controlled crunch 3 × 12, partial sit-up 3 × 6–8, bent-knee hollow hold 2 × 20 s',
+};
+
+/**
+ * Lower body + abs (Nov 2026): Monday and Friday at the gym and Wednesday at
+ * home become the seed's lower-body and abdominal-strength days; the primers
+ * still open each one. Monday at home, Wednesday at the gym and Friday at home
+ * are untouched. Exercises the user already has keep their name, cue and load.
+ */
+export function lowerBodyAbsUpdate(program) {
+  if (!isDayProgram(program)) return { program, changes: [] };
+  let p = program;
+  const changes = [];
+  for (const [loc, day] of ABS_DAYS) {
+    if (loc === 'home' && !p.home) continue;
+    const want = programList(SEED_PROGRAM, day, loc).map((x) => x.id).join();
+    if (programList(p, day, loc).map((x) => x.id).join() === want) continue;
+    p = rebuildFromSeed(p, day, loc, SEED_PROGRAM);
+    changes.push(ABS_CHANGES[`${loc} ${day}`]);
+  }
+  if (changes.length) changes.push('The primers still open each day. Mon at home, Wed at the gym and Fri at home are unchanged');
+  return { program: p, changes };
+}
+
 export const PROGRAM_UPDATES = [
   { id: 'full-body-3day-2026-10', title: '3-day full body + Armor', apply: fullBodyUpdate, undo: false },
   { id: 'cuff-straight-arm-2026-10', title: 'Shoulder superset cue', apply: cuffCueUpdate },
@@ -475,4 +503,5 @@ export const PROGRAM_UPDATES = [
   { id: 'calves-2026-10', title: 'Calves Mon/Fri, pushdowns 2 sets', apply: calvesUpdate },
   { id: 'straight-sets-2026-11', title: 'Straight sets: hips, shoulder, muscle', apply: straightSetsUpdate,
     archive: { name: 'Full body, paired (Oct 2026)', notes: PAIRED_NOTES } },
+  { id: 'lower-body-abs-2026-11', title: 'Lower body + abs: Mon/Fri gym, Wed home', apply: lowerBodyAbsUpdate },
 ];

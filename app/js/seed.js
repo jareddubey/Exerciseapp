@@ -14,9 +14,13 @@
 //    rows and pulldowns stay within the PT's limits; daily shoulder control
 //    work (easy primer on lifting days, the full dose on Armor) and a daily
 //    posterior capsule stretch, alternating sleeper and cross-body.
-// 2. Keep (or build) muscle: about 9–12 hard sets a week for the big muscle
-//    groups, with the loads kept heavy. Monday is the heavier day, Friday the
-//    lighter one (prefill and progression follow each day's own history).
+// 2. Keep (or build) muscle, with the loads kept heavy. Prefill and
+//    progression follow each day's own history.
+// 3. Abdominal strength (Nov 2026): Monday and Friday at the gym are lower
+//    body + abs (leg press, leg extension, leg curl, then crunch variations,
+//    dead bugs and a bent-knee hollow hold); Wednesday at home is single-leg
+//    work, glute bridges and Pilates roll-backs and roll-ups. Monday at home,
+//    Wednesday at the gym and Friday at home are unchanged.
 //
 // Also built around a sensitive lower back (no axial loading, stop before the
 // pelvis tucks) and a right shoulder that dislikes end-range overhead and
@@ -49,9 +53,6 @@ const primers = () => [
 ];
 
 // ---------- gym ----------
-const HACK = { id: 'hack_squat', name: 'Hack squat', increment: 10, cue: 'Warm-up sets first · back flat on pad · feet a bit higher and wider if the left hip pinches · stop before pelvis tucks' };
-const CHEST_PRESS = { id: 'chest_press', name: 'Chest press machine', increment: 5, cue: 'Flat · neutral grip · stop handles at torso, elbows ~45°' };
-const CS_ROW = { id: 'cs_row', name: 'Chest-supported row', increment: 5, cue: 'Neutral grip · stop elbows at the torso line, no yanking past' };
 const LEG_CURL = { id: 'leg_curl', name: 'Seated leg curl', increment: 5, cue: '' };
 const LATERAL = { id: 'db_lateral_raise', name: 'DB lateral raise', increment: 2.5, perHand: true, cue: 'Light · to shoulder height · thumbs level, no pouring · arms slightly forward' };
 const STANDING_CURL = { id: 'standing_bicep_curl', name: 'Standing bicep curl', increment: 5, perHand: true, cue: 'Elbows at your sides · don’t let them drift back at the bottom · add reps before weight' };
@@ -68,6 +69,14 @@ const PALLOF = { id: 'pallof', name: 'Cable Pallof press', increment: 2.5, perSi
 // makes that hip hold the pelvis level too.
 const SPLIT_SQUAT = { id: 'split_squat', name: 'Split squat', increment: 5, perSide: true, cue: 'Right leg forward first · DB in the hand opposite the front leg, other hand on a rack · back knee down to a pad, torso tall, ribs down · push through the whole front foot · stop short of any front-hip pinch' };
 const LEG_EXT = { id: 'leg_ext', name: 'Leg extension', increment: 5, cue: 'If it stalls, check seat depth and pad position' };
+
+// ---------- abs (Mon/Fri at the gym, Wed at home) ----------
+// Same id as the old dead bug, so its history continues.
+const DEAD_BUG = { id: 'dead_bug', name: 'Dead bug', increment: 0, bodyweight: true, perSide: true, cue: 'Brace, ribs down, keep the natural low-back curve (don’t press flat) · slow · arms only as far overhead as is comfortable' };
+const REVERSE_CRUNCH = { id: 'reverse_crunch', name: 'Reverse crunch', increment: 0, bodyweight: true, cue: 'Knees bent · roll the hips up off the floor with the abs, no swinging · 3 s down' };
+const HOLLOW_HOLD = { id: 'bent_knee_hollow_hold', name: 'Bent-knee hollow hold', increment: 0, bodyweight: true, measure: 'time', cue: 'Knees bent over the hips · low back stays down · shoulders just off the floor · breathe' };
+const CRUNCH = { id: 'controlled_crunch', name: 'Controlled crunch', increment: 0, bodyweight: true, cue: 'Hands at the temples, no pulling on the neck · curl the ribs toward the pelvis · 1-s pause, slow down' };
+const PARTIAL_SIT_UP = { id: 'partial_sit_up', name: 'Partial sit-up', increment: 0, bodyweight: true, cue: 'Knees bent, feet flat · curl up until the shoulder blades clear the floor, about halfway · slow down, one vertebra at a time' };
 
 // ---------- armor ----------
 // Recovery, mobility and motor control, before or after the long dog walk.
@@ -101,9 +110,13 @@ const GOBLET = { id: 'goblet_squat', name: 'Goblet squat to bench', increment: 5
 const DB_BENCH = { id: 'db_bench_press', name: 'DB bench press', increment: 5, perHand: true, cue: 'Neutral grip · stop at chest · feet down, no big arch' };
 const DB_ROW = { id: 'db_chest_supported_row', name: 'Chest-supported incline DB row', increment: 5, perHand: true, cue: 'Chest on ~30° bench · neutral grip · no shrug' };
 const BAND_LEG_CURL = { id: 'band_leg_curl', name: 'Seated band leg curl', increment: 0, band: true, cue: 'Band anchored low in front · curl heel under the bench · slow return' };
-const BAND_LAT = { id: 'band_lat_pulldown', name: 'Band lat pulldown', increment: 0, band: true, cue: 'Band over the pull-up bar · half-kneeling · neutral grip · elbows to ribs' };
-const BAND_PALLOF = { id: 'band_pallof', name: 'Band Pallof press', increment: 0, band: true, perSide: true, cue: 'Band at chest height · resist the rotation · slow' };
 const BAND_LEG_EXT = { id: 'band_leg_extension', name: 'Seated band leg extension', increment: 0, band: true, perSide: true, cue: 'Band anchored behind the bench leg · squeeze at the top' };
+// Same ids as the floor glute bridge and the step-back lunge, so their history continues.
+const BRIDGE = { id: 'glut_bridge', name: 'Glute bridge', increment: 0, bodyweight: true, cue: 'Ribs down · stop with hips in line with torso, no arch · then band → DB on hips → single-leg' };
+const REVERSE_LUNGE = { id: 'step_back_lunge', name: 'Reverse lunge', increment: 5, perHand: true, perSide: true, cue: 'Right leg first · DBs at your sides · step back, torso tall · shorter step if the left hip complains' };
+const BULGARIAN = { id: 'bulgarian_split_squat', name: 'Bulgarian split squat', increment: 5, perHand: true, perSide: true, cue: 'Right leg forward first · back foot on the bench · DBs at your sides · torso tall, ribs down · stop short of any front-hip pinch' };
+const HALF_ROLL_BACK = { id: 'pilates_half_roll_back', name: 'Pilates half roll-back', increment: 0, bodyweight: true, cue: 'Sit tall, knees bent, arms forward · tuck the tailbone and roll back halfway on an exhale · pause, roll up' };
+const ASSISTED_ROLL_UP = { id: 'assisted_pilates_roll_up', name: 'Assisted Pilates roll-up', increment: 0, bodyweight: true, cue: 'Lying, knees bent · hands behind the thighs (or a band around the feet) to help · peel up one vertebra at a time, roll down slowly' };
 const BAND_ROW_ER = { id: 'band_row_er', name: 'Band row to ER at 90/90', increment: 0, band: true, perSide: true, cue: 'Band at chest height · elbow ~30° forward of straight out · stop before any pinch' };
 
 export const HOME_PROGRAM = {
@@ -119,12 +132,12 @@ export const HOME_PROGRAM = {
   ],
   wed: [
     ...primers(),
-    p(KICKSTAND, 3, 8, 10, 90),
-    p(GOBLET, 3, 12, 15, 90),
-    p(BAND_LAT, 3, 12, 20, 90),
-    p(PUSH_UP_PLUS, 3, 10, 15, 60),
-    p(BAND_PALLOF, 3, 10, 10, 60),
-    p(HAMMER, 2, 10, 12, 60),
+    p(BULGARIAN, 3, 8, 10, 90),
+    p(BRIDGE, 3, 12, 15, 60),
+    p(REVERSE_LUNGE, 2, 10, 10, 60),
+    p(HALF_ROLL_BACK, 3, 8, 8, 45),
+    p(ASSISTED_ROLL_UP, 3, 5, 5, 45),
+    p(DEAD_BUG, 2, 10, 10, 45),
   ],
   fri: [
     ...primers(),
@@ -144,13 +157,13 @@ export const SEED_PROGRAM = {
   name: 'Straight sets: hips, shoulder, muscle (Nov 2026)',
   mon: [
     ...primers(),
-    p(HACK, 3, 8, 12, 120),
-    p(CHEST_PRESS, 3, 8, 12, 90),
-    p(CS_ROW, 3, 8, 12, 90),
-    p(LEG_CURL, 3, 10, 15, 60),
-    p(LATERAL, 3, 12, 20, 60),
-    p(STANDING_CURL, 2, 10, 15, 60),
-    p(SL_CALF, 3, 12, 20, 45),
+    p(LEG_PRESS, 3, 10, 12, 120),
+    p(LEG_EXT, 3, 12, 12, 60),
+    p(LEG_CURL, 3, 12, 12, 60),
+    p(SL_CALF, 3, 15, 15, 45),
+    p(REVERSE_CRUNCH, 3, 10, 10, 45),
+    p(DEAD_BUG, 2, 10, 10, 45),
+    p(HOLLOW_HOLD, 2, 20, 20, 45),
   ],
   wed: [
     ...primers(),
@@ -163,14 +176,12 @@ export const SEED_PROGRAM = {
   ],
   fri: [
     ...primers(),
-    p(SPLIT_SQUAT, 3, 8, 12, 90),
-    p(CHEST_PRESS, 3, 10, 15, 90),
-    p(CS_ROW, 3, 10, 15, 90),
-    p(LEG_EXT, 2, 12, 15, 60),
-    p(LEG_CURL, 2, 12, 15, 60),
-    p(LATERAL, 3, 12, 20, 60),
-    p(STANDING_CURL, 2, 10, 15, 60),
-    p(SL_CALF, 3, 12, 20, 45),
+    p(LEG_PRESS, 3, 12, 12, 120),
+    p(LEG_EXT, 2, 12, 12, 60),
+    p(LEG_CURL, 3, 12, 12, 60),
+    p(CRUNCH, 3, 12, 12, 45),
+    p(PARTIAL_SIT_UP, 3, 6, 8, 45),
+    p(HOLLOW_HOLD, 2, 20, 20, 45),
   ],
   armor: armor(ROW_ER),
   home: HOME_PROGRAM,
